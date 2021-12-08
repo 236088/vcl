@@ -40,4 +40,7 @@
     <ClInclude Include="loss.h" />
     <ClInclude Include="normalcalc.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
 </Project>

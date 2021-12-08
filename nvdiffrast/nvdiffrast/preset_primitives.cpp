@@ -4,10 +4,10 @@ void PresetPrimitives::init() {
 	int width = 256;
 	int height = 256;
 	Attribute::loadOBJ("../../monkey.obj", &pos, &texel, nullptr);
-	Texture::loadBMP("../../checker.bmp", texture, 8);
+	Texture::loadBMP("../../rocks_ground_diff.bmp", texture, 8);
 	Matrix::init(mat);
-	Matrix::setFovy(mat, 60);
-	Matrix::setEye(mat, 0.f, .5f, 2.f);
+	Matrix::setFovy(mat, 45);
+	Matrix::setEye(mat, 0.f, .5f, 4.f);
 	Project::init(proj, mat.mvp, pos, true);
 	Rasterize::init(rast, proj, width, height, 1, true);
 	Interpolate::init(intr, rast, texel);
@@ -17,15 +17,20 @@ void PresetPrimitives::init() {
 	Project::init(normal_proj, mat.r, normal, r_normal, false);
 	Interpolate::init(normal_intr, rast, r_normal);
 	Texturemap::init(tex, rast, intr, texture);
-	Material::init(mtr, rast, pos_intr, normal_intr, tex.kernel.out);
-	float3 lightpos[1]{
-		-3.f,3.f,3.f
+	Material::init(mtr, rast, pos_intr, normal_intr, 3, tex.kernel.out);
+	float3 direction[4]{
+		-1.f, 0.f, -2.f,
+		2.f, 0.f, -2.f,
+		0.f, -2.f, 1.f,
+		0.f, -1.f, 2.f,
 	};
-	float3 lightintensity[1]{
-		1.f,1.f,1.f
+	float3 lightintensity[4]{
+		.7f,.7f,.7f,
+		.5f,.5f,.5f,
+		.3f,.3f,.3f,
+		.9f,.9f,.9f,
 	};
-	float3 ambient = make_float3(1.f, 1.f, 1.f);
-	Material::init(mtr, (float3*)&mat.eye, 1, lightpos, lightintensity, ambient, .2f, .6f, .8f, 4.f);
+	PBRMaterial::init(mtr, (float3*)&mat.eye, 4, direction, lightintensity, .99f, 2.417f);
 	Antialias::init(aa, rast, proj,  mtr.kernel.out, 3);
 	GaussianFilter::init(flt, rast, aa.kernel.out, 3, 16);
 
@@ -50,7 +55,7 @@ void PresetPrimitives::display(void) {
 	Project::forward(normal_proj);
 	Interpolate::forward(normal_intr);
 	Texturemap::forward(tex);
-	Material::forward(mtr);
+	PBRMaterial::forward(mtr);
 	Antialias::forward(aa);
 	Filter::forward(flt);
 

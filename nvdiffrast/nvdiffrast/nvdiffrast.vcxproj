@@ -50,6 +50,9 @@
     <CudaCompile Include="rasterize.cu" />
     <CudaCompile Include="texturemap.cu" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{1B8B579D-3716-400C-9A5B-DF265C914375}</ProjectGuid>
     <RootNamespace>nvdiffrast</RootNamespace>
