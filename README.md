@@ -1,5 +1,11 @@
 # vcl
 
+Visual Studio 2019
+
+CUDA 11.4
+
+NuGet package : nupengl.core, glm
+
 ## link
 [Modular Primitives for High-Performance Differentiable Rendering](https://arxiv.org/abs/2011.03277)
 
