@@ -11,14 +11,21 @@ struct MaterialKernelParams {
 	int channel;
 	float* pos;
 	float* normal;
+	float* texel;
+	unsigned int* posidx;
+	unsigned int* normalidx;
+	unsigned int* texelidx;
 	float* rast;
-	float* in;
+	float* diffusemap;
+	float* roughnessmap;
+	float* normalmap;
+	float* heightmap;
 
 	float* out;
 
 	float3* eye;
 	int lightNum;
-	float3* direction;
+	float3* point;
 	float* lightintensity;
 	float* params;
 };
@@ -28,8 +35,12 @@ struct MaterialKernelGradParams {
 
 	float* pos;
 	float* normal;
-	float* in;
-	float3* direction;
+	float* texel;
+	float* diffusemap;
+	float* roughnessmap;
+	float* normalmap;
+	float* heightmap;
+	float3* point;
 	float3* lightintensity;
 	float* params;
 };
@@ -47,16 +58,16 @@ struct MaterialGradParams : MaterialParams {
 
 class Material {
 public:
-	static void init(MaterialParams& mtr, RasterizeParams& rast, InterpolateParams& pos, InterpolateParams& normal, int channel, float* in);
-	static void init(MaterialGradParams& mtr, RasterizeParams& rast, InterpolateParams& pos, InterpolateParams& normal, int channel, float* in, float* grad);
-	static void init(MaterialParams& mtr, float3* eye, int lightNum, float3* direction, float3* lightintensity);
+	static void init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* diffusemap, float* roughnessmap, float* normalmap, float* heightmap);
+	static void init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute& texel, int channel, float* in, float* grad);
+	static void init(MaterialParams& mtr, float3* eye, int lightNum, float3* point, float3* lightintensity);
 };
 
 
 
 class PhongMaterial :Material {
 public:
-	static void init(MaterialParams& mtr, float3* eye, int lightNum, float3* direction, float3* lightintensity, float Ka, float Kd, float Ks, float shininess);
+	static void init(MaterialParams& mtr, float3* eye, int lightNum, float3* point, float3* lightintensity, float Ka, float Kd, float Ks, float shininess);
 	static void forward(MaterialParams& mtr);
 	static void forward(MaterialGradParams& mtr);
 	static void backward(MaterialGradParams& mtr);
@@ -66,7 +77,7 @@ public:
 
 class PBRMaterial :Material {
 public:
-	static void init(MaterialParams& mtr, float3* eye, int lightNum, float3* direction, float3* lightintensity, float roughness, float ior);
+	static void init(MaterialParams& mtr, float3* eye, int lightNum, float3* point, float3* lightintensity, float ior);
 	static void forward(MaterialParams& mtr);
 	static void forward(MaterialGradParams& mtr);
 	static void backward(MaterialGradParams& mtr);

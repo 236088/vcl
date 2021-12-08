@@ -6,8 +6,6 @@ void Interpolate::init(InterpolateParams& intr, RasterizeParams& rast, Attribute
     intr.kernel.depth = rast.kernel.depth;
     intr.kernel.enableDA = rast.kernel.enableDB;
     intr.kernel.rast = rast.kernel.out;
-    intr.attrNum = attr.vboNum;
-    intr.idxNum = attr.vaoNum;
     intr.kernel.dimention = attr.dimention;
     intr.kernel.attr = attr.vbo;
     intr.kernel.idx = attr.vao;

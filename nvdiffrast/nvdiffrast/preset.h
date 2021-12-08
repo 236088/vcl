@@ -57,32 +57,34 @@ class PresetPrimitives {
 	Attribute normal;
 	Attribute m_pos;
 	Attribute r_normal;
-	Texture texture;
+	Texture diff;
+	Texture rough;
+	Texture nor;
+	Texture disp;
 
 	NormalcalcParams norm;
 	ProjectParams proj;
 	RasterizeParams rast;
 	InterpolateParams intr;
 	ProjectParams pos_proj;
-	InterpolateParams pos_intr;
 	ProjectParams normal_proj;
-	InterpolateParams normal_intr;
-	TexturemapParams tex;
+	TexturemapParams diff_tex;
+	TexturemapParams rough_tex;
+	TexturemapParams nor_tex;
+	TexturemapParams disp_tex;
 	MaterialParams mtr;
 	AntialiasParams aa;
 	FilterParams flt;
 	GLbuffer rast_buffer;
 	GLbuffer intr_buffer;
-	GLbuffer pos_intr_buffer;
-	GLbuffer normal_intr_buffer;
-	GLbuffer tex_buffer;
+	GLbuffer diff_buffer;
 	GLbuffer mtr_buffer;
 	GLbuffer aa_buffer;
 	GLbuffer flt_buffer;
 
 public:
-	const int windowWidth = 1024;
-	const int windowHeight = 512;
+	const int windowWidth = 1536;
+	const int windowHeight = 1024;
 	void init();
 	void display(void);
 	void update(void);

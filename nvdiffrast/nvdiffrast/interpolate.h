@@ -32,8 +32,6 @@ struct InterpolateParams {
 	InterpolateKernelParams kernel;
 	dim3 grid;
 	dim3 block;
-	int attrNum;
-	int idxNum;
 	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * kernel.dimention * sizeof(float); };
 };
 

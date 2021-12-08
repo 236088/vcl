@@ -235,7 +235,7 @@ __global__ void bmpUcharToFloat(unsigned char* data, const Texture texture) {
     int pidx = px + texture.width * (py + texture.height * pz);
 
     for (int i = 0; i < texture.channel; i++) {
-        texture.texture[0][pidx * texture.channel + i] = (float)data[pidx * texture.channel + 2 - i] / 255.f;
+        texture.texture[0][pidx * texture.channel + i] = (float)data[(pidx + 1) * texture.channel - (i + 1)] / 255.f;
     }
 }
 
@@ -259,13 +259,14 @@ void Texture::loadBMP(const char* path, Texture& texture, int miplevel) {
     unsigned int imageSize = *(int*)&(header[0x22]);
     unsigned int width = *(int*)&(header[0x12]);
     unsigned int height = *(int*)&(header[0x16]);
-    unsigned int channel = 3;
+    unsigned int channel = *(int*)&(header[0x1c]) / 8;
     Texture::init(texture, width, height, channel, miplevel);
     if (imageSize == 0)    imageSize = width * height * channel;
     if (dataPos == 0)      dataPos = 54;
     fseek(file, dataPos, SEEK_SET);
 
-    unsigned char* data = new unsigned char[imageSize];
+    unsigned char* data;
+    cudaMallocHost(&data, imageSize * sizeof(unsigned char));
     fread(data, 1, imageSize, file);
     fclose(file);
 
@@ -278,6 +279,7 @@ void Texture::loadBMP(const char* path, Texture& texture, int miplevel) {
     dim3 grid = getGrid(block, width, height);
     void* args[] = { &dev_data,&texture };
     CUDA_ERROR_CHECK(cudaLaunchKernel(bmpUcharToFloat, grid, block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaFreeHost(data));
     CUDA_ERROR_CHECK(cudaFree(dev_data));
     buildMIP(texture);
 }
