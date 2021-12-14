@@ -9,8 +9,6 @@ void Project::init(ProjectParams& proj, float* mat, Attribute& vec, bool homogen
 	proj.vao = vec.vao;
 	proj.vaoNum = vec.vaoNum;
 	CUDA_ERROR_CHECK(cudaMalloc(&proj.kernel.out, proj.vboSize()));
-	proj.block = getBlock(vec.vboNum, 1);
-	proj.grid = getGrid(proj.block, vec.vboNum, 1);
 }
 
 void Project::init(ProjectParams& proj, float* mat, Attribute& vec, Attribute& out, bool homogeneous) {
@@ -23,8 +21,6 @@ void Project::init(ProjectParams& proj, float* mat, Attribute& vec, Attribute& o
 	proj.vao = vec.vao;
 	proj.vaoNum = vec.vaoNum;
 	proj.kernel.out = out.vbo;
-	proj.block = getBlock(vec.vboNum, 1);
-	proj.grid = getGrid(proj.block, vec.vboNum, 1);
 }
 
 __global__ void ProjectForwardKernel(const ProjectKernelParams proj) {
@@ -38,8 +34,10 @@ __global__ void ProjectForwardKernel(const ProjectKernelParams proj) {
 }
 
 void Project::forward(ProjectParams& proj) {
+	dim3 block = getBlock(proj.kernel.vboNum, 1);
+	dim3 grid = getGrid(block, proj.kernel.vboNum, 1);
 	void* args[] = { &proj.kernel };
-	CUDA_ERROR_CHECK(cudaLaunchKernel(ProjectForwardKernel, proj.grid, proj.block, args, 0, NULL));
+	CUDA_ERROR_CHECK(cudaLaunchKernel(ProjectForwardKernel, grid, block, args, 0, NULL));
 }
 
 void Project::forward(ProjectGradParams& proj) {
@@ -71,6 +69,8 @@ __global__ void ProjectBackwardKernel(const ProjectKernelParams proj, const Proj
 }
 
 void Project::backward(ProjectGradParams& proj) {
+	dim3 block = getBlock(proj.kernel.vboNum, 1);
+	dim3 grid = getGrid(block, proj.kernel.vboNum, 1);
 	void* args[] = { &proj.kernel,&proj.grad };
-	CUDA_ERROR_CHECK(cudaLaunchKernel(ProjectBackwardKernel, proj.grid, proj.block, args, 0, NULL));
+	CUDA_ERROR_CHECK(cudaLaunchKernel(ProjectBackwardKernel, grid, block, args, 0, NULL));
 }

@@ -8,8 +8,8 @@ void Matrix::init(Matrix& mat) {
 	mat.up = glm::vec3(0.f, 1.f, 0.f);
 	mat.fovy = 60.f;
 	mat.aspect = 1.f;
-	mat.znear = .1f;
-	mat.zfar = 10.f;
+	mat.znear = .01f;
+	mat.zfar = 100.f;
 	CUDA_ERROR_CHECK(cudaMalloc(&mat.r, 16 * sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMalloc(&mat.m, 16 * sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMalloc(&mat.mv, 16 * sizeof(float)));

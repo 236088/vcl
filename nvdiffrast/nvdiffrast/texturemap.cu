@@ -12,8 +12,6 @@ void Texturemap::init(TexturemapParams& tex, RasterizeParams& rast, InterpolateP
 	tex.kernel.rast = rast.kernel.out;
 	tex.kernel.uv = intr.kernel.out;
 	tex.kernel.uvDA = intr.kernel.outDA;
-	tex.block = rast.block;
-	tex.grid = rast.grid;
 
 	CUDA_ERROR_CHECK(cudaMalloc(&tex.kernel.out, tex.Size()));
 	for (int i = 0; i < texture.miplevel; i++) {
@@ -39,7 +37,7 @@ __device__ __forceinline__ int4 indexFetch(const TexturemapKernelParams tex, int
 	return idx;
 }
 
-__global__ void TexturemapForwardKernel(const TexturemapKernelParams tex) {
+__global__ void TexturemapMipForwardKernel(const TexturemapKernelParams tex) {
 	int px = blockIdx.x * blockDim.x + threadIdx.x;
 	int py = blockIdx.y * blockDim.y + threadIdx.y;
 	int pz = blockIdx.z;
@@ -92,10 +90,32 @@ __global__ void TexturemapForwardKernel(const TexturemapKernelParams tex) {
 	}
 }
 
+__global__ void TexturemapNoMipForwardKernel(const TexturemapKernelParams tex) {
+	int px = blockIdx.x * blockDim.x + threadIdx.x;
+	int py = blockIdx.y * blockDim.y + threadIdx.y;
+	int pz = blockIdx.z;
+	if (px >= tex.width || py >= tex.height || pz >= tex.depth)return;
+	int pidx = px + tex.width * (py + tex.height * pz);
+
+	if (tex.rast[pidx * 4 + 3] < 1.f) return;
+
+	float2 uv = ((float2*)tex.uv)[pidx];
+	float2 uv0;
+	int4 idx0 = indexFetch(tex, 0, uv, uv0);
+	for (int i = 0; i < tex.channel; i++) {
+		tex.out[pidx * tex.channel + i] = bilerp(
+			tex.texture[0][idx0.x * tex.channel + i], tex.texture[0][idx0.y * tex.channel + i],
+			tex.texture[0][idx0.z * tex.channel + i], tex.texture[0][idx0.w * tex.channel + i], uv0);
+	}
+}
+
 void Texturemap::forward(TexturemapParams& tex) {
 	CUDA_ERROR_CHECK(cudaMemset(tex.kernel.out, 0, tex.Size()));
 	void* args[] = { &tex.kernel };
-	CUDA_ERROR_CHECK(cudaLaunchKernel(TexturemapForwardKernel, tex.grid, tex.block, args, 0, NULL));
+	dim3 block = getBlock(tex.kernel.width, tex.kernel.height);
+	dim3 grid = getGrid(block, tex.kernel.width, tex.kernel.height, tex.kernel.depth);
+	if (tex.kernel.miplevel > 1) CUDA_ERROR_CHECK(cudaLaunchKernel(TexturemapMipForwardKernel, grid,block, args, 0, NULL));
+	else CUDA_ERROR_CHECK(cudaLaunchKernel(TexturemapNoMipForwardKernel, grid, block, args, 0, NULL));
 }
 
 void Texturemap::forward(TexturemapGradParams& tex) {
@@ -202,7 +222,7 @@ __device__ __forceinline__ void calculateLevel(const TexturemapKernelParams tex,
 // dlevel/d(dt/dx) = 1/2ln2/(b * sqrt(b^2-a^2) + (b^2-a^2)) * ((sqrt(b^2-a^2) + b) * dt/dx + a * ds/dy)
 // dlevel/d(dt/dy) = 1/2ln2/(b * sqrt(b^2-a^2) + (b^2-a^2)) * ((sqrt(b^2-a^2) + b) * dt/dy - a * ds/dx)
 //
-__global__ void TexturemapBackwardKernel(const TexturemapKernelParams tex, const TexturemapKernelGradParams grad) {
+__global__ void TexturemapMipBackwardKernel(const TexturemapKernelParams tex, const TexturemapKernelGradParams grad) {
 	int px = blockIdx.x * blockDim.x + threadIdx.x;
 	int py = blockIdx.y * blockDim.y + threadIdx.y;
 	int pz = blockIdx.z;
@@ -234,7 +254,7 @@ __global__ void TexturemapBackwardKernel(const TexturemapKernelParams tex, const
 
 		float u = lerp(t01 - t00, t11 - t10, uv0.y) * (tex.texwidth >> level0);
 		float v = lerp(t10 - t00, t11 - t01, uv0.x) * (tex.texheight >> level0);
-		if (flevel > 0) {
+		if (flevel > 0 && tex.miplevel > 1) {
 			float l = bilerp(t00, t01, t10, t11, uv0);
 			if (grad.texture != nullptr) {
 				atomicAdd(&grad.texture[level1][idx1.x * tex.channel + i], flevel * (1.f - uv1.x) * (1.f - uv1.y) * dLdout);
@@ -259,7 +279,45 @@ __global__ void TexturemapBackwardKernel(const TexturemapKernelParams tex, const
 	}
 }
 
+__global__ void TexturemapNoMipBackwardKernel(const TexturemapKernelParams tex, const TexturemapKernelGradParams grad) {
+	int px = blockIdx.x * blockDim.x + threadIdx.x;
+	int py = blockIdx.y * blockDim.y + threadIdx.y;
+	int pz = blockIdx.z;
+	if (px >= tex.width || py >= tex.height || pz >= tex.depth)return;
+	int pidx = px + tex.width * (py + tex.height * pz);
+	if (tex.rast[pidx * 4 + 3] < 1.f) return;
+
+	float2 uv = ((float2*)tex.uv)[pidx], uv0, uv1;
+	float gu = 0.f, gv = 0.f, gl = 0.f;
+	int4 idx0 = indexFetch(tex, 0, uv, uv0);
+
+	for (int i = 0; i < tex.channel; i++) {
+		float dLdout = grad.out[pidx * tex.channel + i];
+		if (grad.texture != nullptr) {
+			atomicAdd(&grad.texture[0][idx0.x * tex.channel + i], (1.f - uv0.x) * (1.f - uv0.y) * dLdout);
+			atomicAdd(&grad.texture[0][idx0.y * tex.channel + i], uv0.x * (1.f - uv0.y) * dLdout);
+			atomicAdd(&grad.texture[0][idx0.z * tex.channel + i], (1.f - uv0.x) * uv0.y * dLdout);
+			atomicAdd(&grad.texture[0][idx0.w * tex.channel + i], uv0.x * uv0.y * dLdout);
+		}
+		float t00 = tex.texture[0][idx0.x * tex.channel + i];
+		float t01 = tex.texture[0][idx0.y * tex.channel + i];
+		float t10 = tex.texture[0][idx0.z * tex.channel + i];
+		float t11 = tex.texture[0][idx0.w * tex.channel + i];
+
+		float u = lerp(t01 - t00, t11 - t10, uv0.y) * (tex.texwidth);
+		float v = lerp(t10 - t00, t11 - t01, uv0.x) * (tex.texheight);
+		gu += u * dLdout;
+		gv += v * dLdout;
+	}
+	if (grad.uv != nullptr) {
+		((float2*)grad.uv)[pidx] = make_float2(gu, gv);
+	}
+}
+
 void Texturemap::backward(TexturemapGradParams& tex) {
+	dim3 block = getBlock(tex.kernel.width, tex.kernel.height);
+	dim3 grid = getGrid(block, tex.kernel.width, tex.kernel.height, tex.kernel.depth);
 	void* args[] = { &tex.kernel, &tex.grad };
-	CUDA_ERROR_CHECK(cudaLaunchKernel(TexturemapBackwardKernel, tex.grid, tex.block, args, 0, NULL));
+	if(tex.kernel.miplevel>1)CUDA_ERROR_CHECK(cudaLaunchKernel(TexturemapMipBackwardKernel, grid, block, args, 0, NULL));
+	else CUDA_ERROR_CHECK(cudaLaunchKernel(TexturemapNoMipBackwardKernel, grid, block, args, 0, NULL));
 }

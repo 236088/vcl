@@ -83,8 +83,6 @@ void Rasterize::init(RasterizeParams& rast, ProjectParams& proj, int width, int 
 	CUDA_ERROR_CHECK(cudaMallocHost(&rast.gl_outDB, rast.Size()));
 	CUDA_ERROR_CHECK(cudaMalloc(&rast.kernel.out, rast.Size()));
 	CUDA_ERROR_CHECK(cudaMalloc(&rast.kernel.outDB, rast.Size()));
-	rast.block = getBlock(width, height);
-	rast.grid = getGrid(rast.block, width, height, depth);
 
 	GLuint vertexShader;
 	GLuint geometryShader;

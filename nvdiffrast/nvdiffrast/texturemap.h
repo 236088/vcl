@@ -32,8 +32,6 @@ struct TexturemapKernelGradParams {
 
 struct TexturemapParams {
 	TexturemapKernelParams kernel;
-	dim3 grid;
-	dim3 block;
 	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * kernel.channel * sizeof(float); };
 };
 

@@ -9,8 +9,6 @@ void Filter::init(FilterParams& flt, RasterizeParams& rast, float* in, int chann
 	flt.kernel.in = in;
 	CUDA_ERROR_CHECK(cudaMalloc(&flt.kernel.out, flt.Size()));
 	CUDA_ERROR_CHECK(cudaMalloc(&flt.kernel.buf, flt.Size()));
-	flt.block = rast.block;
-	flt.grid = rast.grid;
 }
 __device__ __forceinline__ void calculateRange(int p, int k, int w, int& s, int& e, int& f) {
 	s = p - k;
@@ -59,9 +57,11 @@ __global__ void FilterForwardKernelVertical(const FilterKernelParams flt) {
 void Filter::forward(FilterParams& flt) {
 	CUDA_ERROR_CHECK(cudaMemset(flt.kernel.out, 0, flt.Size()));
 	CUDA_ERROR_CHECK(cudaMemset(flt.kernel.buf, 0, flt.Size()));
+	dim3 block = getBlock(flt.kernel.width, flt.kernel.height);
+	dim3 grid = getGrid(block, flt.kernel.width, flt.kernel.height, flt.kernel.depth);
 	void* args[] = { &flt.kernel };
-	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterForwardKernelHorizontal, flt.grid, flt.block, args, 0, NULL));
-	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterForwardKernelVertical, flt.grid, flt.block, args, 0, NULL));
+	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterForwardKernelHorizontal, grid, block, args, 0, NULL));
+	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterForwardKernelVertical, grid, block, args, 0, NULL));
 }
 
 void Filter::forward(FilterGradParams& flt){
@@ -111,8 +111,10 @@ void Filter::backward(FilterGradParams& flt) {
 	CUDA_ERROR_CHECK(cudaMemset(flt.grad.in, 0, flt.Size()));
 	CUDA_ERROR_CHECK(cudaMemset(flt.kernel.buf, 0, flt.Size()));
 	void* args[] = { &flt.kernel,&flt.grad };
-	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterBackwardKernelHorizontal, flt.grid, flt.block, args, 0, NULL));
-	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterBackwardKernelVertical, flt.grid, flt.block, args, 0, NULL));
+	dim3 block = getBlock(flt.kernel.width, flt.kernel.height);
+	dim3 grid = getGrid(block, flt.kernel.width, flt.kernel.height, flt.kernel.depth);
+	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterBackwardKernelHorizontal, grid, block, args, 0, NULL));
+	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterBackwardKernelVertical, grid, block, args, 0, NULL));
 }
 
 void GaussianFilter::init(FilterParams& flt, RasterizeParams& rast, float* in, int channel, int k){

@@ -23,6 +23,7 @@
     <ClCompile Include="preset_cube.cpp" />
     <ClCompile Include="preset_earth.cpp" />
     <ClCompile Include="preset_filter.cpp" />
+    <ClCompile Include="preset_phong.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="antialias.h" />

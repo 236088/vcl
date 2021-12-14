@@ -141,6 +141,8 @@ __global__ void RasterizeBackwardKernel(const RasterizeKernelParams rast, const 
 }
 
 void Rasterize::backward(RasterizeGradParams& rast) {
+    dim3 block = getBlock(rast.kernel.width, rast.kernel.height);
+    dim3 grid = getGrid(block, rast.kernel.width, rast.kernel.height, rast.kernel.depth);
     void* args[] = { &rast.kernel, &rast.grad };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(RasterizeBackwardKernel, rast.grid, rast.block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(RasterizeBackwardKernel, grid, block, args, 0, NULL));
 }

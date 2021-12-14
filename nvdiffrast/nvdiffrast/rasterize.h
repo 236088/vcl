@@ -26,8 +26,6 @@ struct RasterizeKernelGradParams{
 
 struct RasterizeParams {
 	RasterizeKernelParams kernel;
-	dim3 grid;
-	dim3 block;
 
 	int projNum;
 	int idxNum;

@@ -126,7 +126,7 @@ void Attribute::copy(Attribute& dst, Attribute& src) {
     if(dst.vao!=src.vao)cudaMemcpy(dst.vao, src.vao, dst.vaoSize(), cudaMemcpyDeviceToDevice);
 }
 
-__global__ void Affine(float* attr, float w, float b, int width, int height) {
+__global__ void AttributeLinerKernel(float* attr, float w, float b, int width, int height) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
     if (px >= width || py >= height)return;
@@ -134,14 +134,14 @@ __global__ void Affine(float* attr, float w, float b, int width, int height) {
     attr[pidx] = attr[pidx] * w + b;
 }
 
-void Attribute::affine(Attribute& attr, float w, float b) {
+void Attribute::liner(Attribute& attr, float w, float b) {
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
     void* args[] = { &attr.vbo, &w,&b,&attr.vboNum,&attr.dimention };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(Affine, grid, block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(AttributeLinerKernel, grid, block, args, 0, NULL));
 }
 
-__global__ void Random(float* buffer, float min, float max, int width, int height, unsigned int seed) {
+__global__ void AttributeRandomKernel(float* buffer, float min, float max, int width, int height, unsigned int seed) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
     if (px >= width || py >= height)return;
@@ -154,7 +154,7 @@ void Attribute::addRandom(Attribute& attr, float min, float max) {
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
     void* args[] = { &attr.vbo,&min,&max,&attr.vboNum,&attr.dimention, &seed };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(Random, grid, block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(AttributeRandomKernel, grid, block, args, 0, NULL));
 }
 
 void AttributeGrad::init(AttributeGrad& attr, int vboNum, int vaoNum, int dimention) {
@@ -174,7 +174,7 @@ void AttributeGrad::clear(AttributeGrad& attr) {
 
 
 void Texture::init(Texture& texture, int width, int height, int channel, int miplevel){
-    miplevel = miplevel < TEX_MAX_MIP_LEVEL ? miplevel : TEX_MAX_MIP_LEVEL;
+    miplevel = miplevel < 1 ? 1 : (TEX_MAX_MIP_LEVEL < miplevel ? TEX_MAX_MIP_LEVEL : miplevel);
     if (((width >> miplevel) << miplevel) != width || ((height >> miplevel) << miplevel) != height) {
         printf("Invalid miplevel value");
         exit(1);
@@ -189,6 +189,7 @@ void Texture::init(Texture& texture, int width, int height, int channel, int mip
         w >>= 1; h >>= 1;
     }
 };
+
 
 __global__ void downSampling(const Texture texture, int index, int width, int height) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
@@ -217,9 +218,9 @@ __global__ void downSampling(const Texture texture, int index, int width, int he
 
 void Texture::buildMIP(Texture& texture) {
     int w = texture.width, h = texture.height;
-    int i = 0;
+    int i = 1;
     void* args[] = { &texture, &i, &w, &h };
-    for (i = 1; i < texture.miplevel; i++) {
+    for (; i < texture.miplevel; i++) {
         w >>= 1; h >>= 1;
         dim3 block = getBlock(w, h);
         dim3 grid = getGrid(block, w, h);
@@ -283,6 +284,120 @@ void Texture::loadBMP(const char* path, Texture& texture, int miplevel) {
     CUDA_ERROR_CHECK(cudaFree(dev_data));
     buildMIP(texture);
 }
+
+__global__ void TextureSetColorKernel (const Texture texture, int index, int width, int height, float* color) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * (py + height * pz);
+
+    for (int i = 0; i < texture.channel; i++) {
+        texture.texture[index][pidx * texture.channel + i] = color[i];
+    }
+}
+
+void Texture::setColor(Texture& texture, float* color) {
+    int w = texture.width, h = texture.height;
+    int i = 0;
+    float* dev_color;
+    CUDA_ERROR_CHECK(cudaMalloc(&dev_color, (size_t)texture.channel * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemcpy(dev_color, color, (size_t)texture.channel * sizeof(float), cudaMemcpyHostToDevice));
+    void* args[] = { &texture,&i, &w, &h ,&dev_color };
+    for (; i < texture.miplevel; i++) {
+        dim3 block = getBlock(w, h);
+        dim3 grid = getGrid(block, w, h);
+        CUDA_ERROR_CHECK(cudaLaunchKernel(TextureSetColorKernel, grid, block, args, 0, NULL));
+        w >>= 1; h >>= 1;
+    }
+    CUDA_ERROR_CHECK(cudaFree(dev_color));
+}
+
+__global__ void TextureLinerKernel (const Texture texture, int index, int width, int height, float w, float b) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * (py + height * pz);
+
+    for (int i = 0; i < texture.channel; i++) {
+        texture.texture[index][pidx * texture.channel + i] = texture.texture[index][pidx * texture.channel + i] * w + b;
+    }
+}
+
+void Texture::liner(Texture& texture, float w, float b) {
+    int w_ = texture.width, h_ = texture.height;
+    int i = 0;
+    void* args[] = { &texture,&i, &w_, &h_, &w, &b};
+    for (; i < texture.miplevel; i++) {
+        dim3 block = getBlock(w_, h_);
+        dim3 grid = getGrid(block, w_, h_);
+        CUDA_ERROR_CHECK(cudaLaunchKernel(TextureLinerKernel, grid, block, args, 0, NULL));
+        w_ >>= 1; h_ >>= 1;
+    }
+}
+
+__global__ void normalizeKernel (const Texture texture, int index, int width, int height) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * (py + height * pz);
+
+    float s = 0.f;
+    for (int i = 0; i < texture.channel; i++) {
+        float v = texture.texture[index][pidx * texture.channel + i];
+        s += v * v;
+    }
+    s = 1.f/sqrt(s);
+    if (isfinite(s)) {
+        for (int i = 0; i < texture.channel; i++) {
+            texture.texture[index][pidx * texture.channel + i] *= s;
+        }
+    }
+    else {
+        for (int i = 0; i < texture.channel - 1; i++) {
+            texture.texture[index][pidx * texture.channel + i] = 0.f;
+        }
+        texture.texture[index][(pidx + 1) * texture.channel - 1] = 1.f;
+    }
+}
+
+void Texture::normalize(Texture& texture) {
+    int w = texture.width, h = texture.height;
+    int i = 0;
+    void* args[] = { &texture,&i, &w, &h};
+    for (; i < texture.miplevel; i++) {
+        dim3 block = getBlock(w, h);
+        dim3 grid = getGrid(block, w, h);
+        CUDA_ERROR_CHECK(cudaLaunchKernel(normalizeKernel, grid, block, args, 0, NULL));
+        w >>= 1; h >>= 1;
+    }
+}
+
+__global__ void TextureRandomKernel(const Texture texture, float max, float min, unsigned int seed) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= texture.width || py >= texture.height)return;
+    int pidx = px + texture.width * (py + texture.height * pz);
+
+    for (int i = 0; i < texture.channel; i++) {
+        texture.texture[0][pidx * texture.channel + i] = min + (max - min) * getUniform(pidx * texture.channel + i,seed,0xf122ba22);
+    }
+}
+
+void Texture::addRandom(Texture& texture, float max, float min) {
+    int w_ = texture.width, h_ = texture.height;
+    unsigned int seed = rand();
+    dim3 block = getBlock(texture.width, texture.height);
+    dim3 grid = getGrid(block, texture.width, texture.height);
+    void* args[] = { &texture,&max,&min ,&seed };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(TextureRandomKernel, grid, block, args, 0, NULL));
+    buildMIP(texture);
+}
+
+
 
 void TextureGrad::init(TextureGrad& texture, int width, int height, int channel, int miplevel) {
     Texture::init(texture, width, height, channel, miplevel);

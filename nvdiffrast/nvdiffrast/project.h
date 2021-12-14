@@ -19,8 +19,6 @@ struct ProjectKernelGradParams {
 
 struct ProjectParams{
 	ProjectKernelParams kernel;
-	dim3 block;
-	dim3 grid;
 	unsigned int* vao;
 	int vaoNum;
 	size_t vboSize() { return (size_t)kernel.vboNum * kernel.dimention * sizeof(float); };

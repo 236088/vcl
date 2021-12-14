@@ -8,8 +8,6 @@ void Noise::init(NoiseParams& np, RasterizeParams& rast, float* in, int channel,
 	np.kernel.intensity = intensity;
 	np.kernel.in = in;
 	CUDA_ERROR_CHECK(cudaMalloc(&np.kernel.out, np.Size()));
-	np.block = rast.block;
-	np.grid = rast.grid;
 }
 
 __global__ void NoiseForwardKernel(const NoiseKernelParams np,unsigned int seed) {
@@ -26,8 +24,10 @@ __global__ void NoiseForwardKernel(const NoiseKernelParams np,unsigned int seed)
 void Noise::forward(NoiseParams& np) {
 	CUDA_ERROR_CHECK(cudaMemset(np.kernel.out, 0, np.Size()));
 	unsigned int seed = rand();
+	dim3 block = getBlock(np.kernel.width, np.kernel.height);
+	dim3  grid = getGrid(block, np.kernel.width, np.kernel.height);
 	void* args[] = { &np.kernel ,&seed };
-	CUDA_ERROR_CHECK(cudaLaunchKernel(NoiseForwardKernel, np.grid, np.block, args, 0, NULL));
+	CUDA_ERROR_CHECK(cudaLaunchKernel(NoiseForwardKernel, grid, block, args, 0, NULL));
 }
 
 void GLbuffer::init(GLbuffer& rb, float* buffer, int width, int height, int channel, int attachmentNum) {
@@ -54,6 +54,18 @@ void GLbuffer::draw(GLbuffer& rb, GLint internalformat, GLenum format, float min
 	glTexCoord2f(0.f, 1.f); glVertex2f(minX, maxY);
 	glTexCoord2f(1.f, 1.f); glVertex2f(maxX, maxY);
 	glTexCoord2f(1.f, 0.f); glVertex2f(maxX, minY);
+	glEnd();
+}
+
+void GLbuffer::draw(GLbuffer& rb, GLint internalformat, GLenum format, float texminX, float texminY, float texmaxX, float texmaxY, float minX, float minY, float maxX, float maxY) {
+	CUDA_ERROR_CHECK(cudaMemcpy(rb.gl_buffer, rb.buffer, rb.Size(), cudaMemcpyDeviceToHost));
+	glBindTexture(GL_TEXTURE_2D, rb.id);
+	glTexImage2D(GL_TEXTURE_2D, 0, internalformat, rb.width, rb.height, 0, format, GL_FLOAT, rb.gl_buffer);
+	glBegin(GL_POLYGON);
+	glTexCoord2f(texminX, texminY); glVertex2f(minX, minY);
+	glTexCoord2f(texminX, texmaxY); glVertex2f(minX, maxY);
+	glTexCoord2f(texmaxX, texmaxY); glVertex2f(maxX, maxY);
+	glTexCoord2f(texmaxX, texminY); glVertex2f(maxX, minY);
 	glEnd();
 }
 

@@ -1,5 +1,23 @@
 #include "material.h"
 
+void Material::init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* in) {
+    if (pos.kernel.dimention != 3)ERROR_STRING(dimention is not 3);
+    if (normal.kernel.dimention != 3)ERROR_STRING(dimention is not 3);
+    mtr.kernel.width = rast.kernel.width;
+    mtr.kernel.height = rast.kernel.height;
+    mtr.kernel.depth = rast.kernel.depth;
+    mtr.kernel.channel = channel;
+    mtr.kernel.pos = pos.kernel.out;
+    mtr.kernel.normal = normal.kernel.out;
+    mtr.kernel.texel = texel->vbo;
+    mtr.kernel.posidx = pos.vao;
+    mtr.kernel.normalidx = normal.vao;
+    mtr.kernel.texelidx = texel->vao;
+    mtr.kernel.rast = rast.kernel.out;
+    mtr.kernel.diffusemap = in;
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.out, mtr.Size()));
+}
+
 void Material::init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* diffusemap, float* roughnessmap, float* normalmap, float* heightmap) {
     if (pos.kernel.dimention != 3)ERROR_STRING(dimention is not 3);
     if (normal.kernel.dimention != 3)ERROR_STRING(dimention is not 3);
@@ -19,36 +37,64 @@ void Material::init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& p
     mtr.kernel.normalmap = normalmap;
     mtr.kernel.heightmap = heightmap;
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.out, mtr.Size()));
-    mtr.block = rast.block;
-    mtr.grid = rast.grid;
 }
 
-void Material::init(MaterialParams& mtr, float3* eye, int lightNum, float3* point, float3* lightintensity) {
+void Material::init(MaterialParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, int paramsNum, float* params) {
     mtr.kernel.eye = eye;
     mtr.kernel.lightNum = lightNum;
-
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.point, (size_t)lightNum * sizeof(float3)));
-    CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.point, point, (size_t)lightNum * sizeof(float3), cudaMemcpyHostToDevice));
+    mtr.kernel.paramsNum = paramsNum;
+    for (int i = 0; i < lightNum; i++) {
+        float r = 1.f / sqrt(direction[i].x * direction[i].x + direction[i].y * direction[i].y + direction[i].z * direction[i].z);
+        direction[i].x *= r;
+        direction[i].y *= r;
+        direction[i].z *= r;
+    }
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.direction, (size_t)lightNum * sizeof(float3)));
+    CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.direction, direction, (size_t)lightNum * sizeof(float3), cudaMemcpyHostToDevice));
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.lightintensity, (size_t)lightNum * mtr.kernel.channel * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.lightintensity, lightintensity, (size_t)lightNum * mtr.kernel.channel * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.params, (size_t)paramsNum * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.params, params, (size_t)paramsNum * sizeof(float), cudaMemcpyHostToDevice));
 }
 
-void Material::init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute& texel, int channel, float* in, float* grad) {
-    init((MaterialParams&)mtr, rast, pos, normal, nullptr, channel, in, nullptr, nullptr, nullptr);
+void Material::init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* in, float* grad) {
+    init((MaterialParams&)mtr, rast, pos, normal, texel, channel, in, nullptr, nullptr, nullptr);
     mtr.grad.diffusemap = grad;
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.out, mtr.Size()));
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.point, (size_t)mtr.kernel.lightNum * sizeof(float3)));
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.lightintensity, (size_t)mtr.kernel.lightNum * mtr.kernel.channel * sizeof(float)));
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.params, (size_t)4 * sizeof(float)));
 }
 
+void Material::init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* diffusemap, float* roughnessmap, float* normalmap, float* heightmap, float* graddiffuse, float* gradroughness, float* gradnormal, float* gradheight) {
+    init((MaterialParams&)mtr, rast, pos, normal, texel, channel, diffusemap, roughnessmap, normalmap, heightmap);
+    mtr.grad.diffusemap = graddiffuse;
+    mtr.grad.roughnessmap = gradroughness;
+    mtr.grad.normalmap = gradnormal;
+    mtr.grad.heightmap = gradheight;
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.out, mtr.Size()));
+}
+
+void Material::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, int paramsNum, float* params) {
+    Material::init((MaterialParams&)mtr, eye, lightNum, direction, lightintensity, paramsNum, params);
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.direction, (size_t)mtr.kernel.lightNum * sizeof(float3)));
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.lightintensity, (size_t)mtr.kernel.lightNum * mtr.kernel.channel * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.params, (size_t)mtr.kernel.paramsNum * sizeof(float)));
+}
+
+void Material::clear(MaterialGradParams& mtr) {
+    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.direction, 0, (size_t)mtr.kernel.lightNum * sizeof(float3)));
+    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.lightintensity, 0, (size_t)mtr.kernel.lightNum * mtr.kernel.channel * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.params, 0, (size_t)mtr.kernel.paramsNum * sizeof(float)));
+};
 
 
-void PhongMaterial::init(MaterialParams& mtr, float3* eye, int lightNum, float3* point, float3* lightintensity, float Ka, float Kd, float Ks, float shininess) {
-    Material::init(mtr, eye, lightNum, point, lightintensity);
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.params, (size_t)4 * sizeof(float)));
+
+void PhongMaterial::init(MaterialParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, float Ka, float Kd, float Ks, float shininess) {
     float params[4]{ Ka, Kd,  Ks,  shininess };
-    CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.params, params, (size_t)4 * sizeof(float), cudaMemcpyHostToDevice));
+    Material::init(mtr, eye, lightNum, direction, lightintensity, 4, params);
+}
+
+void PhongMaterial::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, float Ka, float Kd, float Ks, float shininess) {
+    float params[4]{ Ka, Kd,  Ks,  shininess };
+    Material::init(mtr, eye, lightNum, direction, lightintensity, 4, params);
 }
 
 __global__ void PhongMaterialForwardKernel(const MaterialKernelParams mtr) {
@@ -79,8 +125,7 @@ __global__ void PhongMaterialForwardKernel(const MaterialKernelParams mtr) {
     float shininess = mtr.params[3];
 
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 point = mtr.point[i];
-        float3 l = normalize(point - pos);
+        float3 l = -mtr.direction[i];
         float ln = dot(l, n);
         float3 r = 2.f * ln * n - l;
         float rv = dot(r, v);
@@ -96,15 +141,15 @@ __global__ void PhongMaterialForwardKernel(const MaterialKernelParams mtr) {
 
 void PhongMaterial::forward(MaterialParams& mtr) {
     CUDA_ERROR_CHECK(cudaMemset(mtr.kernel.out, 0, mtr.Size()));
+    dim3 block = getBlock(mtr.kernel.width, mtr.kernel.height);
+    dim3 grid = getGrid(block, mtr.kernel.width, mtr.kernel.height, mtr.kernel.depth);
     void* args[] = { &mtr.kernel };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(PhongMaterialForwardKernel, mtr.grid, mtr.block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(PhongMaterialForwardKernel, grid, block, args, 0, NULL));
 }
+
 
 void PhongMaterial::forward(MaterialGradParams& mtr) {
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.out, 0, mtr.Size()));
-    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.point, 0, (size_t)mtr.kernel.lightNum * sizeof(float3)));
-    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.lightintensity, 0, (size_t)mtr.kernel.lightNum * mtr.kernel.channel * sizeof(float)));
-    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.params, 0, (size_t)4 * sizeof(float)));
     forward((MaterialParams&)mtr);
 }
 
@@ -128,15 +173,15 @@ __global__ void PhongMaterialBackwardKernel(const MaterialKernelParams mtr, cons
 
     float3 pos = p0 * r.x + p1 * r.y + p2;
     float3 n = normalize(n0 * r.x + n1 * r.y + n2);
-    float3 v = normalize(*(float3*)&mtr.eye - pos);
+    float3 v = normalize(mtr.eye - pos);
 
     float Ka = mtr.params[0];
     float Kd = mtr.params[1];
     float Ks = mtr.params[2];
 
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 point = mtr.point[i];
-        float3 l = normalize(point - pos);
+        float3 direction = -mtr.direction[i];
+        float3 l = normalize(direction - pos);
         float ln = dot(l, n);
         float3 r = 2.f * ln * n - l;
         float rv = dot(r, v);
@@ -159,18 +204,74 @@ __global__ void PhongMaterialBackwardKernel(const MaterialKernelParams mtr, cons
 }
 
 void PhongMaterial::backward(MaterialGradParams& mtr) {
+    dim3 block = getBlock(mtr.kernel.width, mtr.kernel.height);
+    dim3 grid = getGrid(block, mtr.kernel.width, mtr.kernel.height, mtr.kernel.depth);
     void* args[] = { &mtr.kernel, &mtr.grad };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(PhongMaterialBackwardKernel, mtr.grid, mtr.block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(PhongMaterialBackwardKernel, grid, block, args, 0, NULL));
 }
 
 
 
-void PBRMaterial::init(MaterialParams& mtr, float3* eye, int lightNum, float3* point, float3* lightintensity, float ior) {
-    Material::init(mtr, eye, lightNum, point, lightintensity);
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.params, sizeof(float)));
+void PBRMaterial::init(MaterialParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, float ior) {
     float params[1]{ ior };
-    CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.params, params, sizeof(float), cudaMemcpyHostToDevice));
+    Material::init(mtr, eye, lightNum, direction, lightintensity, 1, params);
 }
+
+void PBRMaterial::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, float ior) {
+    float params[1]{ ior };
+    Material::init(mtr, eye, lightNum, direction, lightintensity, 1, params);
+}
+
+//
+// Cook-Torrance GGX
+// 
+// n:normal
+// v=normalize(eye-pos)
+// l=normalize(light-pos)
+// h=normalize(v+l)
+// 
+// lh=dot(l,h)
+// g=sqrt(ior^2-1+lh^2)
+// dg/dlh=lh/g
+// dg/dior=ior/g
+// 
+// F0=((g-lh)/(g+lh))^2
+// F1=1+((lh*(g+lh)-1)/(lh*(g-lh)+1))^2
+// F=1/2*F0*F1
+// 
+// F'=1/2*(F0'*F1+F0*F1')
+// dF/dlh=1/2*4/g*((g-lh)/(g+lh)^3)*(lh^2-g^2)*F1+F0*4/g*(lh^2*ior^2+g^2)*((lh*(g+lh)-1)/(lh*(g-lh)+1)^3)
+// dF/dior=1/2*4/g*ior*lh*((g-lh)/(g+lh)^3)*F1+F0*4/g*lh*ior*(1-lh^2)*((lh*(g+lh)-1)/(lh*(g-lh)+1)^3)
+// 
+// m=roughness^2
+// nh=dot(n,h)
+// D=m/pi/(nh^2*(m-1)+1)^2
+// dD/dnh=-4*m*(m-1)*nh/pi/(nh^2*(m-1)+1)^3
+// dD/droughness=roughness*2*(1-nh^2*(m+1))/pi/(nh^2*(m-1)+1)^3
+// 
+// nv=dot(n,v)
+// Vv=1/(nv+sqrt(nv^2+m*(1-nv^2)))
+// dVv/dnv=-(sqrt(nv^2+m*(1-nv^2))+nv*(1-m))/sqrt(nv^2*(1-m)+m)/(nv+sqrt(nv^2+m*(1-nv^2)))^2
+// dVv/droughness=-roughness*(1-nv^2)/sqrt(nv^2+m*(1-nv^2))/(nv+sqrt(nv^2+m*(1-nv^2)))^2
+// nl=dot(n,l)
+// Vl=1/(nl+sqrt(nl^2+m*(1-nl^2)))
+// dVl/dnl=-(sqrt(nl^2+m*(1-nl^2))+nl*(1-m))/sqrt(nl^2*(1-m)+m)/(nl+sqrt(nl^2+m*(1-nl^2)))^2
+// dVl/droughness=-roughness*(1-nl^2)/sqrt(nl^2+m*(1-nl^2))/(nl+sqrt(nl^2+m*(1-nl^2)))^2
+// V=Vv*Vl
+// dV/dn=Vv*dVl/dnl*l+Vl*dVv/dnv*v
+// dV/dv=Vl*dVv/dnv*n
+// dV/dl=Vv*dVl/dnl*n
+// dV/droughness=Vv*dVl/droughness+Vl*dVv/droughness
+// 
+// specular=F*D*Vv*Vl
+// diffuse=nl/pi
+// ddiffuse/dl=n/pi
+// ddiffuse/dn=l/pi
+// out=intensity*(in*diffuse+specular)
+// dL/dspecular=dL/dout*intensity
+// dL/ddiffuse=dL/dout*intensity*in
+// dL/din=dL/dout*intensity*diffuse
+//
 
 __global__ void PBRMaterialForwardKernel(const MaterialKernelParams mtr) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
@@ -195,56 +296,57 @@ __global__ void PBRMaterialForwardKernel(const MaterialKernelParams mtr) {
     float2 uv1 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3 + 1]] - uv2;
 
     float3 pos = p0 * r.x + p1 * r.y + p2;
-    float3 normal = normalize(n0 * r.x + n1 * r.y + n2);
-    float3 tangent = normalize(p0 * uv1.y - p1 * uv0.y);
-    float3 bitangent = normalize(p1 * uv0.x - p0 * uv1.x);
+    float3 N = normalize(n0 * r.x + n1 * r.y + n2);
+    float3 T = normalize(p0 * uv1.y - p1 * uv0.y);
+    float3 B = normalize(p1 * uv0.x - p0 * uv1.x);
 
-    float3 n = ((float3*)mtr.normalmap)[pidx];
-    n = 2.f * n - 1.f;
-    n = normalize(tangent * n.x + bitangent * n.y + normal * n.z);
-    float3 v = normalize(*(float3*)&mtr.eye - pos);
+    float3 normal = ((float3*)mtr.normalmap)[pidx];
+    normal = T * normal.x + B * normal.y + N * normal.z;
+    float3 n = normalize(normal);
+    float3 v = normalize(mtr.eye - pos);
 
-    float m_2 = mtr.roughnessmap[pidx] * mtr.roughnessmap[pidx];
-    float n_2 = mtr.params[0] * mtr.params[0] - 1.f;
+    float m2 = mtr.roughnessmap[pidx] * mtr.roughnessmap[pidx];
+    float ior2 = mtr.params[0] * mtr.params[0] - 1.f;
     float disp = mtr.heightmap[pidx];
 
     float nv = max(dot(n, v), 0.f);
+    float Vv = 1.f / (nv + sqrt(m2 + nv * nv * (1.f - m2)));
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = normalize(mtr.point[i] - pos);
+        float3 l = -mtr.direction[i];
         float3 h = normalize(l + v);
-        float nl = max(dot(n, l), 0.f);
-        float nh = max(dot(n, h), 0.f);
         float lh = max(dot(l, h), 0.f);
-        float D = (nh * nh * (m_2 - 1.f) + 1.f);
-        D = m_2 / (D * D * 3.14159265f);
-        float Vl = 1.f / (nl + sqrt(m_2 + nl * nl * (1.f - m_2)));
-        float Vv = 1.f / (nv + sqrt(m_2 + nv * nv * (1.f - m_2)));
-        float g = sqrt(n_2 + lh * lh);
+        float g = sqrt(ior2 + lh * lh);
         float g_nlh = g - lh;
         float g_plh = g + lh;
         float F = (g_nlh / g_plh);
         F *= F * .5f;
         float F1 = (lh * g_plh - 1.f) / (lh * g_nlh + 1.f);
         F *= (1.f + F1 * F1);
-        float specular = nl * D * Vl * Vv * F;
+        float nh = max(dot(n, h), 0.f);
+        float D = (nh * nh * (m2 - 1.f) + 1.f);
+        D = m2 / (D * D * 3.14159265f);
+        float nl = max(dot(n, l), 0.f);
+        float Vl = 1.f / (nl + sqrt(m2 + nl * nl * (1.f - m2)));
+        float specular = D * Vl * Vv * F;
         float diffuse = nl / 3.14159265f;
         for (int k = 0; k < mtr.channel; k++) {
             float intensity = mtr.lightintensity[i * mtr.channel + k];
             mtr.out[pidx * mtr.channel + k] += intensity * (mtr.diffusemap[pidx * mtr.channel + k] * diffuse + specular);
         }
-    }       
-    ((float3*)mtr.out)[pidx] = clamp(((float3*)mtr.out)[pidx], 0.f, 1.f);
+    }
 }
 
 void PBRMaterial::forward(MaterialParams& mtr) {
     CUDA_ERROR_CHECK(cudaMemset(mtr.kernel.out, 0, mtr.Size()));
+    dim3 block = getBlock(mtr.kernel.width, mtr.kernel.height);
+    dim3 grid = getGrid(block, mtr.kernel.width, mtr.kernel.height, mtr.kernel.depth);
     void* args[] = { &mtr.kernel };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(PBRMaterialForwardKernel, mtr.grid, mtr.block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(PBRMaterialForwardKernel, grid, block, args, 0, NULL));
 }
 
 void PBRMaterial::forward(MaterialGradParams& mtr) {
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.out, 0, mtr.Size()));
-    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.point, 0, (size_t)mtr.kernel.lightNum * sizeof(float3)));
+    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.direction, 0, (size_t)mtr.kernel.lightNum * sizeof(float3)));
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.lightintensity, 0, (size_t)mtr.kernel.lightNum * mtr.kernel.channel * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.params, 0, sizeof(float)));
     forward((MaterialParams&)mtr);
@@ -261,48 +363,104 @@ __global__ void PBRMaterialBackwardKernel(const MaterialKernelParams mtr, const 
     int idx = (int)r.w - 1;
     if (idx < 0) return;
 
-    float3 p0 = ((float3*)mtr.pos)[mtr.posidx[idx * 3]];
-    float3 p1 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 1]];
     float3 p2 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 2]];
-    float3 n0 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3]];
-    float3 n1 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 1]];
+    float3 p0 = ((float3*)mtr.pos)[mtr.posidx[idx * 3]] - p2;
+    float3 p1 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 1]] - p2;
     float3 n2 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 2]];
+    float3 n0 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3]] - n2;
+    float3 n1 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 1]] - n2;
+    float2 uv2 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3 + 2]];
+    float2 uv0 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3]] - uv2;
+    float2 uv1 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3 + 1]] - uv2;
 
-    float3 pos = p0 * r.x + p1 * r.y + p2 * (1.0 - r.x - r.y);
-    float3 n = normalize(n0 * r.x + n1 * r.y + n2 * (1.0 - r.x - r.y));
-    float3 v = normalize(*(float3*)&mtr.eye - pos);
+    float3 pos = p0 * r.x + p1 * r.y + p2;
+    float3 N = normalize(n0 * r.x + n1 * r.y + n2);
+    float3 T = normalize(p0 * uv1.y - p1 * uv0.y);
+    float3 B = normalize(p1 * uv0.x - p0 * uv1.x);
 
-    float m_2 = mtr.roughnessmap[pidx] * mtr.roughnessmap[pidx];
-    float n_2 = mtr.params[0] * mtr.params[0] - 1.f;
+    float3 normal = ((float3*)mtr.normalmap)[pidx];
+    normal = T * normal.x + B * normal.y + N * normal.z;
+    float in = 1.f / length(normal);
+    float3 n = normal * in;
+    float3 v = normalize(mtr.eye - pos);
+
+    float m2 = mtr.roughnessmap[pidx] * mtr.roughnessmap[pidx];
+    float m2_1 = 1.f - m2;
+    float ior2 = mtr.params[0] * mtr.params[0];
 
     float nv = max(dot(n, v), 0.f);
+    float v2 = nv * nv;
+    float k = sqrt(m2 + v2 * (1.f - m2));
+    float Vv = 1.f / (nv + k);
+    float kv = Vv * Vv / k;
+    float dVvdnv = -(k + nv * m2_1) * kv;
+    kv *= (v2 - 1.f);
+    float3 dLdn = make_float3(0.f, 0.f, 0.f);
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = -mtr.point[i];
+        float3 l = -mtr.direction[i];
         float3 h = normalize(l + v);
-        float nl = max(dot(n, l), 0.f);
+
         float nh = max(dot(n, h), 0.f);
+        v2 = nh * nh;
+        k = 1.f / (1.f - v2 * m2_1);
+        float kD = k * k / 3.14159265f;
+        float D = m2 * kD;
+        kD *= k;
+        float dDdnh = 4 * m2_1 * m2 * nh * kD;
+        kD *= 2.f * (1.f - v2 * (m2 + 1.f));
+
+        float nl = max(dot(n, l), 0.f);
+        k = sqrt(m2 + nl * nl * (1.f - m2));
+        float Vl = 1.f / (nl + k);
+        float kl = Vl * Vl / k;
+        float dVldnl = -(k + nl * m2_1) * kl;
+        kl *= (v2 - 1.f);
+
         float lh = max(dot(l, h), 0.f);
-        float D = (nh * nh * (m_2 - 1.f) + 1.f);
-        D = m_2 / (D * D * 3.14159265f);
-        float Vl = 1.f / (nl + sqrt(m_2 + nl * nl * (1.f - m_2)));
-        float Vv = 1.f / (nv + sqrt(m_2 + nv * nv * (1.f - m_2)));
-        float g = sqrt(n_2 + lh * lh);
-        float g_nlh = g - lh;
+        v2 = lh * lh;
+        float g2 = ior2 - 1.f + v2;
+        float g = sqrt(g2);
         float g_plh = g + lh;
-        float F = (g_nlh / g_plh);
-        F *= F * .5f;
-        float F1 = (lh * g_plh - 1.f) / (lh * g_nlh + 1.f);
-        F *= (1.f + F1 * F1);
+        float kF0 = (g - lh) / g_plh;
+        float F0 = kF0 * kF0;
+        kF0 /= (g_plh * g_plh);
+        float g_nlh_1 = lh * (g - lh) + 1.f;
+        float kF1 = (lh * g_plh - 1.f) / g_nlh_1;
+        float F1 = 1.f + kF1 * kF1;
+        float F = .5f * F0 * F1;
+        k = 2.f / g;
+        float dFdlh = k * (kF0 * (v2 - g2) * F1 + kF1 * (v2 * ior2 + g2) * F0);
+
+        float3 dVdn = dVvdnv * v * Vl + dVldnl * l * Vv;
+        float V = Vv * Vl;
+        grad.params[0] += k * mtr.params[0] * lh * (kF0 * F1 + kF1 * (1.f - v2) * F0) * D * V;
         float specular = nl * D * Vl * Vv * F;
         float diffuse = nl / 3.14159265f;
-        for (int k = 0; k < mtr.channel; k++) {
-            float intensity = mtr.lightintensity[i * mtr.channel + k];
-            mtr.out[pidx * mtr.channel + k] += intensity * (mtr.diffusemap[pidx * mtr.channel + k] * diffuse + specular);
+        k = kv * Vl + kl * Vv;
+        for (int j = 0; j < mtr.channel; j++) {
+            float dLdout = grad.out[pidx * mtr.channel + j];
+            float intensity = mtr.lightintensity[i * mtr.channel + j];
+            float dLdspecular = dLdout* intensity;
+            grad.diffusemap[pidx * mtr.channel + j] += dLdspecular * diffuse;
+            float dLddiffuse = dLdspecular * mtr.diffusemap[pidx * mtr.channel + j];
+            grad.roughnessmap[pidx] += dLdspecular * mtr.roughnessmap[pidx] * (kD * V + k * D);
+            dLdn+= dLdspecular * F * (dDdnh * h * V + dVdn * D) + dLddiffuse * l;
         }
     }
+    dLdn = in * (dLdn - n * dot(n, dLdn));
+    dLdn = make_float3(dot(dLdn, T), dot(dLdn, B), dot(dLdn, N));
+    ((float3*)grad.normalmap)[pidx] += dLdn;
 }
 
 void PBRMaterial::backward(MaterialGradParams& mtr) {
+    dim3 block = getBlock(mtr.kernel.width, mtr.kernel.height);
+    dim3 grid = getGrid(block, mtr.kernel.width, mtr.kernel.height, mtr.kernel.depth);
+    if (mtr.kernel.width > mtr.kernel.height) {
+        block.x >>= 1; grid.x <<= 1;
+    }
+    else {
+        block.y >>= 1; grid.y <<= 1;
+    }
     void* args[] = { &mtr.kernel, &mtr.grad };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(PBRMaterialBackwardKernel, mtr.grid, mtr.block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(PBRMaterialBackwardKernel, grid, block, args, 0, NULL));
 }

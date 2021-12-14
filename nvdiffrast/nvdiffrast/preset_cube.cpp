@@ -10,7 +10,7 @@ void PresetCube::init(int resolution) {
 	Attribute::loadOBJ("../../cube.obj", &target_pos, nullptr, nullptr);
 	Attribute::init(target_color, target_pos, 3);
 	Attribute::copy(target_color, target_pos);
-	Attribute::affine(target_color, .5f, .5f);
+	Attribute::liner(target_color, .5f, .5f);
 	AttributeGrad::init(predict_pos, target_pos.vboNum, target_pos.vaoNum, 3);
 	Attribute::copy(predict_pos, target_pos);
 	Attribute::addRandom(predict_pos, -.5f, .5f);
@@ -88,10 +88,10 @@ void PresetCube::display() {
 
 	glViewport(0, 0, windowWidth, windowHeight);
 	glEnable(GL_TEXTURE_2D);
-	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, -1.f, 0.f, 0.f, 1.f);
-	GLbuffer::draw(gl_predict, GL_RGB32F, GL_RGB, 0.f, 0.f, 1.f, 1.f);
-	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 0.f);
-	GLbuffer::draw(gl_hr_predict, GL_RGB32F, GL_RGB, 0.f, -1.f, 1.f, 0.f);
+	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, 0.f, 0.f, 1.f, 1.f);
+	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, 0.f, -1.f, 1.f, 0.f);
+	GLbuffer::draw(gl_predict, GL_RGB32F, GL_RGB, -1.f, 0.f, 0.f, 1.f);
+	GLbuffer::draw(gl_hr_predict, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 0.f);
 	glFlush();
 }
 

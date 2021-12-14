@@ -30,8 +30,6 @@ struct InterpolateKernelGradParams {
 
 struct InterpolateParams {
 	InterpolateKernelParams kernel;
-	dim3 grid;
-	dim3 block;
 	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * kernel.dimention * sizeof(float); };
 };
 

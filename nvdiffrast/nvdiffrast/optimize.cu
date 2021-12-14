@@ -22,7 +22,7 @@ void Optimizer::init(OptimizeParams& opt, TextureGrad& texture) {
 	init(opt, texture.texture[0], texture.grad[0], size, texture.width, texture.height, texture.channel);
 }
 
-__global__ void random(const OptimizeKernelParams opt, unsigned int seed, float min, float max) {
+__global__ void optimizeRandom(const OptimizeKernelParams opt, unsigned int seed, float min, float max) {
 	int px = blockIdx.x * blockDim.x + threadIdx.x;
 	int py = blockIdx.y * blockDim.y + threadIdx.y;
 	int pz = blockIdx.z;
@@ -35,7 +35,23 @@ __global__ void random(const OptimizeKernelParams opt, unsigned int seed, float 
 void Optimizer::randomParams(OptimizeParams& opt, float min, float max) {
 	unsigned int seed = rand();
 	void* args[] = { &opt.kernel ,&seed, &min, &max };
-	CUDA_ERROR_CHECK(cudaLaunchKernel(random, opt.grid, opt.block, args, 0, NULL));
+	CUDA_ERROR_CHECK(cudaLaunchKernel(optimizeRandom, opt.grid, opt.block, args, 0, NULL));
+}
+
+__global__ void optimizeClamp(const OptimizeKernelParams opt, unsigned int seed, float min, float max) {
+	int px = blockIdx.x * blockDim.x + threadIdx.x;
+	int py = blockIdx.y * blockDim.y + threadIdx.y;
+	int pz = blockIdx.z;
+	int pidx = px + opt.width * (py + opt.height * pz);
+	if (pidx >= opt.size)return;
+	unsigned int rnd = pidx;
+	opt.param[pidx] = clamp(opt.param[pidx], min, max);
+}
+
+void Optimizer::clampParams(OptimizeParams& opt, float min, float max) {
+	unsigned int seed = rand();
+	void* args[] = { &opt.kernel ,&seed, &min, &max };
+	CUDA_ERROR_CHECK(cudaLaunchKernel(optimizeClamp, opt.grid, opt.block, args, 0, NULL));
 }
 
 void Adam::setHyperParams(AdamParams& adam, double eta, double rhom, double rhov, double eps) {

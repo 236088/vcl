@@ -9,8 +9,7 @@ struct AntialiasKernelParams {
 	int height;
 	int depth;
 	int channel;
-	float xh;
-	float yh;
+	float2 s;
 
 	float* proj;
 	unsigned int* idx;
@@ -29,8 +28,6 @@ struct AntialiasKernelGradParams {
 
 struct AntialiasParams {
 	AntialiasKernelParams kernel;
-	dim3 block;
-	dim3 grid;
 	int projNum;
 	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * kernel.channel * sizeof(float); };
 };

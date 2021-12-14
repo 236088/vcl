@@ -15,7 +15,7 @@ struct Attribute {
 	static void init(Attribute& attr, Attribute& src, int dimention);
 	static void loadOBJ(const char* path, Attribute* pos, Attribute* texel, Attribute* normal); 
 	static void copy(Attribute& dst, Attribute& src);
-	static void affine(Attribute& attr, float w, float b);
+	static void liner(Attribute& attr, float w, float b);
 	static void addRandom(Attribute& attr, float min, float max);
 };
 
@@ -36,6 +36,10 @@ struct Texture {
 	static void init(Texture& texture, int width, int height, int channel, int miplevel);
 	static void buildMIP(Texture& texture);
 	static void loadBMP(const char* path, Texture& texture, int miplevel);
+	static void setColor(Texture& texture, float* color);
+	static void liner(Texture& texture, float w, float b);
+	static void normalize(Texture& texture);
+	static void addRandom(Texture& texture, float min, float max);
 };
 
 struct TextureGrad : Texture {

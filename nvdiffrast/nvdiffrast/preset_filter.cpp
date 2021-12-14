@@ -10,7 +10,7 @@ void PresetFilter::init(int resolution,int k) {
 	Attribute::loadOBJ("../../cube.obj", &target_pos, nullptr, nullptr);
 	Attribute::init(target_color, target_pos, 3);
 	Attribute::copy(target_color, target_pos);
-	Attribute::affine(target_color, .5f, .5f);
+	Attribute::liner(target_color, .5f, .5f);
 	AttributeGrad::init(predict_pos, target_pos.vboNum, target_pos.vaoNum, 3);
 	Attribute::copy(predict_pos, target_pos);
 	Attribute::addRandom(predict_pos, -.5f, .5f);
@@ -21,8 +21,7 @@ void PresetFilter::init(int resolution,int k) {
 	Rasterize::init(target_rast, target_proj, resolution, resolution, 1, false);
 	Interpolate::init(target_intr, target_rast, target_color);
 	Antialias::init(target_aa, target_rast, target_proj, target_intr.kernel.out, 3);
-	Noise::init(target_np, target_rast, target_aa.kernel.out, 3, .5f);
-	GaussianFilter::init(target_flt, target_rast, target_np.kernel.out, 3, k);
+	GaussianFilter::init(target_flt, target_rast, target_aa.kernel.out, 3, k);
 
 	Project::init(predict_proj, mat.mvp, predict_pos, true);
 	Rasterize::init(predict_rast, predict_proj, resolution, resolution, 1, false);
@@ -33,8 +32,8 @@ void PresetFilter::init(int resolution,int k) {
 	Loss::init(loss, target_flt.kernel.out, predict_flt.kernel.out, predict_flt.grad.out, resolution, resolution, 3);
 	Optimizer::init(adam_pos, predict_pos);
 	Optimizer::init(adam_color, predict_color);
-	Adam::setHyperParams(adam_pos, 1e-2, 0.9, 0.999, 1e-8);
-	Adam::setHyperParams(adam_color, 1e-2, 0.9, 0.999, 1e-8);
+	Adam::setHyperParams(adam_pos, 1e-3, 0.9, 0.999, 1e-8);
+	Adam::setHyperParams(adam_color, 1e-3, 0.9, 0.999, 1e-8);
 
 	Project::init(hr_target_proj, hr_mat.mvp, target_pos, true);
 	Rasterize::init(hr_target_rast, hr_target_proj, 512, 512, 1, false);
@@ -47,9 +46,9 @@ void PresetFilter::init(int resolution,int k) {
 	Antialias::init(hr_predict_aa, hr_predict_rast, hr_predict_proj, hr_predict_intr.kernel.out, 3);
 
 	GLbuffer::init(gl_aa_target, target_aa.kernel.out, resolution, resolution, 3, 15);
-	GLbuffer::init(gl_np_target, target_np.kernel.out, resolution, resolution, 3, 14);
+	GLbuffer::init(gl_hr_target, hr_target_aa.kernel.out, 512, 512, 3, 14);
 	GLbuffer::init(gl_target, target_flt.kernel.out, resolution, resolution, 3, 13);
-	GLbuffer::init(gl_hr_target, hr_target_aa.kernel.out, 512, 512, 3, 12);
+	GLbuffer::init(gl_aa_predict, predict_aa.kernel.out, resolution, resolution, 3, 12);
 	GLbuffer::init(gl_predict, predict_flt.kernel.out, resolution, resolution, 3, 11);
 	GLbuffer::init(gl_hr_predict, hr_predict_aa.kernel.out, 512, 512, 3, 10);
 }
@@ -62,7 +61,6 @@ void PresetFilter::display() {
 	Rasterize::forward(target_rast);
 	Interpolate::forward(target_intr);
 	Antialias::forward(target_aa);
-	Noise::forward(target_np);
 	Filter::forward(target_flt);
 
 	Project::forward(predict_proj);
@@ -97,16 +95,16 @@ void PresetFilter::display() {
 
 	glViewport(0, 0, windowWidth, windowHeight);
 	glEnable(GL_TEXTURE_2D);
-	GLbuffer::draw(gl_aa_target, GL_RGB32F, GL_RGB, -1.f, 0.f, -.33333333f, 1.f);
-	GLbuffer::draw(gl_np_target, GL_RGB32F, GL_RGB, -1.f, -1.f, -.33333333f, 0.f);
-	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, -.33333333f, 0.f, .33333333f, 1.f);
-	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, -.33333333f, -1.f, .33333333f, 0.f);
-	GLbuffer::draw(gl_predict, GL_RGB32F, GL_RGB, .33333333f, 0.f, 1.f, 1.f);
-	GLbuffer::draw(gl_hr_predict, GL_RGB32F, GL_RGB, .33333333f, -1.f, 1.f, 0.f);
+	GLbuffer::draw(gl_aa_predict, GL_RGB32F, GL_RGB, -1.f, 0.f, -.33333333f, 1.f);
+	GLbuffer::draw(gl_predict, GL_RGB32F, GL_RGB, -.33333333f, 0.f, .33333333f, 1.f);
+	GLbuffer::draw(gl_hr_predict, GL_RGB32F, GL_RGB, .33333333f, 0.f, 1.f, 1.f);
+	GLbuffer::draw(gl_aa_target, GL_RGB32F, GL_RGB, -1.f, -1.f, -.33333333f, 0.f);
+	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, -.33333333f, -1.f, .33333333f, 0.f);
+	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, .33333333f, -1.f, 1.f, 0.f);
 	glFlush();
 }
 
 void PresetFilter::update() {
 	Matrix::setRandomRotation(mat);
-	Matrix::addRotation(hr_mat, 1.f, 0.f, 1.f, 0.f);
+	Matrix::addRotation(hr_mat, .1f, 0.f, 1.f, 0.f);
 }

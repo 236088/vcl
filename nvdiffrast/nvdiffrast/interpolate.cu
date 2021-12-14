@@ -15,8 +15,6 @@ void Interpolate::init(InterpolateParams& intr, RasterizeParams& rast, Attribute
         intr.kernel.rastDB = rast.kernel.outDB;
         CUDA_ERROR_CHECK(cudaMalloc(&intr.kernel.outDA, intr.Size() * 2));
     }
-    intr.block = rast.block;
-    intr.grid = rast.grid;
 }
 
 __global__ void InterplateForwardKernel(const InterpolateKernelParams intr) {
@@ -55,8 +53,10 @@ void Interpolate::forward(InterpolateParams& intr) {
     if (intr.kernel.enableDA) {
         CUDA_ERROR_CHECK(cudaMemset(intr.kernel.outDA, 0, intr.Size() * 2));
     }
+    dim3 block = getBlock(intr.kernel.width, intr.kernel.height);
+    dim3 grid = getGrid(block, intr.kernel.width, intr.kernel.height, intr.kernel.depth);
     void* args[] = { &intr.kernel };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(InterplateForwardKernel, intr.grid, intr.block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(InterplateForwardKernel, grid, block, args, 0, NULL));
 }
 
 void Interpolate::forward(InterpolateGradParams& intr) {
@@ -143,6 +143,8 @@ __global__ void InterpolateBackwardKernel(const InterpolateKernelParams intr, co
 }
 
 void Interpolate::backward(InterpolateGradParams& intr) {
+    dim3 block = getBlock(intr.kernel.width, intr.kernel.height);
+    dim3 grid = getGrid(block, intr.kernel.width, intr.kernel.height, intr.kernel.depth);
     void* args[] = { &intr.kernel,&intr.grad};
-    CUDA_ERROR_CHECK(cudaLaunchKernel(InterpolateBackwardKernel, intr.grid, intr.block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(InterpolateBackwardKernel, grid, block, args, 0, NULL));
 }
