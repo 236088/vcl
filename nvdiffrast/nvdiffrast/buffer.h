@@ -40,6 +40,7 @@ struct Texture {
 	static void liner(Texture& texture, float w, float b);
 	static void normalize(Texture& texture);
 	static void addRandom(Texture& texture, float min, float max);
+	static void clamp(Texture& texture, float min, float max);
 };
 
 struct TextureGrad : Texture {

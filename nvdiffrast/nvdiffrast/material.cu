@@ -193,12 +193,12 @@ __global__ void PhongMaterialBackwardKernel(const MaterialKernelParams mtr, cons
             float intensity = mtr.lightintensity[i * mtr.channel + k];
             float diffuse = intensity * max(ln, 0.f);
             float specular = intensity * powrv;
-            float dshine = intensity * log(max(rv, 1e-3)) * powrv;
+            float dshine = dLdout * Ks * intensity * log(max(rv, 1e-3)) * powrv;
             grad.diffusemap[pidx * mtr.channel + k] = dLdout * (Ka + Kd * diffuse + Ks * specular);
             atomicAdd(&grad.params[0], din);
             atomicAdd(&grad.params[1], din * diffuse);
             atomicAdd(&grad.params[2], din * specular);
-            atomicAdd(&grad.params[3], Ks * dshine);
+            atomicAdd(&grad.params[3], dshine);
         }
     }
 }
@@ -247,16 +247,16 @@ void PBRMaterial::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3
 // nh=dot(n,h)
 // D=m/pi/(nh^2*(m-1)+1)^2
 // dD/dnh=-4*m*(m-1)*nh/pi/(nh^2*(m-1)+1)^3
-// dD/droughness=roughness*2*(1-nh^2*(m+1))/pi/(nh^2*(m-1)+1)^3
+// dD/droughness=2*roughness*(1-nh^2*(m+1))/pi/(nh^2*(m-1)+1)^3
 // 
 // nv=dot(n,v)
 // Vv=1/(nv+sqrt(nv^2+m*(1-nv^2)))
 // dVv/dnv=-(sqrt(nv^2+m*(1-nv^2))+nv*(1-m))/sqrt(nv^2*(1-m)+m)/(nv+sqrt(nv^2+m*(1-nv^2)))^2
-// dVv/droughness=-roughness*(1-nv^2)/sqrt(nv^2+m*(1-nv^2))/(nv+sqrt(nv^2+m*(1-nv^2)))^2
+// dVv/droughness=-2*roughness*(1-nv^2)/sqrt(nv^2+m*(1-nv^2))/(nv+sqrt(nv^2+m*(1-nv^2)))^2
 // nl=dot(n,l)
 // Vl=1/(nl+sqrt(nl^2+m*(1-nl^2)))
 // dVl/dnl=-(sqrt(nl^2+m*(1-nl^2))+nl*(1-m))/sqrt(nl^2*(1-m)+m)/(nl+sqrt(nl^2+m*(1-nl^2)))^2
-// dVl/droughness=-roughness*(1-nl^2)/sqrt(nl^2+m*(1-nl^2))/(nl+sqrt(nl^2+m*(1-nl^2)))^2
+// dVl/droughness=-2*roughness*(1-nl^2)/sqrt(nl^2+m*(1-nl^2))/(nl+sqrt(nl^2+m*(1-nl^2)))^2
 // V=Vv*Vl
 // dV/dn=Vv*dVl/dnl*l+Vl*dVv/dnv*v
 // dV/dv=Vl*dVv/dnv*n
@@ -309,7 +309,7 @@ __global__ void PBRMaterialForwardKernel(const MaterialKernelParams mtr) {
     float ior2 = mtr.params[0] * mtr.params[0] - 1.f;
     float disp = mtr.heightmap[pidx];
 
-    float nv = max(dot(n, v), 0.f);
+    float nv = max(dot(n, v), 1e-3);
     float Vv = 1.f / (nv + sqrt(m2 + nv * nv * (1.f - m2)));
     for (int i = 0; i < mtr.lightNum; i++) {
         float3 l = -mtr.direction[i];
@@ -325,7 +325,7 @@ __global__ void PBRMaterialForwardKernel(const MaterialKernelParams mtr) {
         float nh = max(dot(n, h), 0.f);
         float D = (nh * nh * (m2 - 1.f) + 1.f);
         D = m2 / (D * D * 3.14159265f);
-        float nl = max(dot(n, l), 0.f);
+        float nl = max(dot(n, l), 1e-3);
         float Vl = 1.f / (nl + sqrt(m2 + nl * nl * (1.f - m2)));
         float specular = D * Vl * Vv * F;
         float diffuse = nl / 3.14159265f;
@@ -388,7 +388,7 @@ __global__ void PBRMaterialBackwardKernel(const MaterialKernelParams mtr, const 
     float m2_1 = 1.f - m2;
     float ior2 = mtr.params[0] * mtr.params[0];
 
-    float nv = max(dot(n, v), 0.f);
+    float nv = max(dot(n, v), 1e-3);
     float v2 = nv * nv;
     float k = sqrt(m2 + v2 * (1.f - m2));
     float Vv = 1.f / (nv + k);
@@ -406,15 +406,19 @@ __global__ void PBRMaterialBackwardKernel(const MaterialKernelParams mtr, const 
         float kD = k * k / 3.14159265f;
         float D = m2 * kD;
         kD *= k;
-        float dDdnh = 4 * m2_1 * m2 * nh * kD;
-        kD *= 2.f * (1.f - v2 * (m2 + 1.f));
+        float dDdnh = 4.f * m2_1 * m2 * nh * kD;
+        kD *= (1.f - v2 * (m2 + 1.f));
 
-        float nl = max(dot(n, l), 0.f);
-        k = sqrt(m2 + nl * nl * (1.f - m2));
+        float nl = max(dot(n, l), 1e-3);
+        v2 = nl * nl;
+        k = sqrt(m2 + v2 * (1.f - m2));
         float Vl = 1.f / (nl + k);
         float kl = Vl * Vl / k;
         float dVldnl = -(k + nl * m2_1) * kl;
         kl *= (v2 - 1.f);
+
+        float3 dVdn = dVvdnv * v * Vl + dVldnl * l * Vv;
+        float V = Vv * Vl;
 
         float lh = max(dot(l, h), 0.f);
         v2 = lh * lh;
@@ -431,20 +435,18 @@ __global__ void PBRMaterialBackwardKernel(const MaterialKernelParams mtr, const 
         k = 2.f / g;
         float dFdlh = k * (kF0 * (v2 - g2) * F1 + kF1 * (v2 * ior2 + g2) * F0);
 
-        float3 dVdn = dVvdnv * v * Vl + dVldnl * l * Vv;
-        float V = Vv * Vl;
         grad.params[0] += k * mtr.params[0] * lh * (kF0 * F1 + kF1 * (1.f - v2) * F0) * D * V;
+
         float specular = nl * D * Vl * Vv * F;
         float diffuse = nl / 3.14159265f;
-        k = kv * Vl + kl * Vv;
+        k = kD * V + (kv * Vl + kl * Vv) * D;
         for (int j = 0; j < mtr.channel; j++) {
             float dLdout = grad.out[pidx * mtr.channel + j];
-            float intensity = mtr.lightintensity[i * mtr.channel + j];
-            float dLdspecular = dLdout* intensity;
-            grad.diffusemap[pidx * mtr.channel + j] += dLdspecular * diffuse;
-            float dLddiffuse = dLdspecular * mtr.diffusemap[pidx * mtr.channel + j];
-            grad.roughnessmap[pidx] += dLdspecular * mtr.roughnessmap[pidx] * (kD * V + k * D);
-            dLdn+= dLdspecular * F * (dDdnh * h * V + dVdn * D) + dLddiffuse * l;
+            dLdout *= mtr.lightintensity[i * mtr.channel + j];
+            grad.diffusemap[pidx * mtr.channel + j] += dLdout * diffuse;
+            float dLddiffuse = dLdout * mtr.diffusemap[pidx * mtr.channel + j] / 3.14159265f;
+            grad.roughnessmap[pidx] += dLdout * k * 2.f * mtr.roughnessmap[pidx];
+            dLdn+= dLdout * F * (dDdnh * h * V + dVdn * D) + dLddiffuse * l;
         }
     }
     dLdn = in * (dLdn - n * dot(n, dLdn));

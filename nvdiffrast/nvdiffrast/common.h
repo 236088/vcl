@@ -11,12 +11,14 @@
 #include <device_atomic_functions.h>
 #include <cuda_runtime.h>
 
-#include <iostream>
 #include <math.h>
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
 #include <vector>
 #include <stdio.h>
+#include <iostream>
+#include <fstream>
+using namespace std;
 
 #define MAX_DIM_PER_BLOCK 32
 

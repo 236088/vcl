@@ -8,12 +8,12 @@ struct InterpolateKernelParams {
 	int width;
 	int height;
 	int depth;
+	int dimention;
 	int enableDA;
 	float* rast;
 	float* rastDB;
 	float* attr;
 	unsigned int* idx;
-	int dimention;
 
 	float* out;
 	float* outDA;

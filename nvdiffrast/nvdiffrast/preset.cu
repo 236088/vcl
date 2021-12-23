@@ -30,7 +30,7 @@ void Noise::forward(NoiseParams& np) {
 	CUDA_ERROR_CHECK(cudaLaunchKernel(NoiseForwardKernel, grid, block, args, 0, NULL));
 }
 
-void GLbuffer::init(GLbuffer& rb, float* buffer, int width, int height, int channel, int attachmentNum) {
+void GLbuffer::init(GLbuffer& rb, float* buffer, int width, int height, int channel) {
 	rb.width = width;
 	rb.height = height;
 	rb.channel = channel;
@@ -42,7 +42,7 @@ void GLbuffer::init(GLbuffer& rb, float* buffer, int width, int height, int chan
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + attachmentNum, rb.id, 0);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT15, rb.id, 0);
 }
 
 void GLbuffer::draw(GLbuffer& rb, GLint internalformat, GLenum format, float minX, float minY, float maxX, float maxY) {

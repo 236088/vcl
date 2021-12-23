@@ -397,6 +397,27 @@ void Texture::addRandom(Texture& texture, float max, float min) {
     buildMIP(texture);
 }
 
+__global__ void TextureClampKernel(const Texture texture, float min, float max) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= texture.width || py >= texture.height)return;
+    int pidx = px + texture.width * (py + texture.height * pz);
+
+    for (int i = 0; i < texture.channel; i++) {
+        texture.texture[0][pidx * texture.channel + i] = clamp(texture.texture[0][pidx * texture.channel + i], min, max);
+    }
+}
+
+void Texture::clamp(Texture& texture, float min, float max) {
+    int w_ = texture.width, h_ = texture.height;
+    dim3 block = getBlock(texture.width, texture.height);
+    dim3 grid = getGrid(block, texture.width, texture.height);
+    void* args[] = { &texture,&min ,&max};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(TextureClampKernel, grid, block, args, 0, NULL));
+    buildMIP(texture);
+}
+
 
 
 void TextureGrad::init(TextureGrad& texture, int width, int height, int channel, int miplevel) {

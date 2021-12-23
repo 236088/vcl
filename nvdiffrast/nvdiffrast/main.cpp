@@ -1,18 +1,14 @@
 #include "preset.h"
 #include <ctime>
-#define CONSOLE_INTERVAL 100
-#define PAUSE_COUNT 3000
-#define EXIT_COUNT 3000
 struct timespec pre, cur;
 double t;
 float loss_sum = 0;
-int count = 0;
 bool play = false;
 
-PresetPrimitives preset;
+//PresetPrimitives preset;
 //PresetCube preset;
 //PresetEarth preset;
-//PresetFilter preset;
+PresetFilter preset;
 //PresetPhong preset;
 
 
@@ -26,13 +22,6 @@ static void InitFunc()
 static void DisplayFunc(void)
 {
 	preset.display();
-	loss_sum += preset.getLoss();
-	if ((++count) % CONSOLE_INTERVAL == 0) {
-		printf(" count: %d, loss: %f\n", count, loss_sum / CONSOLE_INTERVAL);
-		loss_sum = 0;
-	}
-	if (count % PAUSE_COUNT == 0)play = false;
-	if (count % EXIT_COUNT == 0)exit(0);
 }
 
 static void IdleFunc(void) 
@@ -46,7 +35,6 @@ static void IdleFunc(void)
 	t += dt;
 	preset.update(dt);
 
-	printf("\r%3.3f ms:%3.3f fps", dt * 1e3, 1./ dt);
 	glutPostRedisplay();
 }
 
