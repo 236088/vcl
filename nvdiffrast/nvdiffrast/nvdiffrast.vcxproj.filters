@@ -18,7 +18,7 @@
     <ClCompile Include="common.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="rasterize.cpp" />
-    <ClCompile Include="preset_primitives.cpp" />
+    <ClCompile Include="preset_pbr.cpp" />
     <ClCompile Include="matrix.cpp" />
     <ClCompile Include="preset_cube.cpp" />
     <ClCompile Include="preset_earth.cpp" />

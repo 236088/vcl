@@ -25,6 +25,8 @@ using namespace std;
 dim3 getBlock(int width, int height);
 dim3 getGrid(dim3 block, int width, int height);
 dim3 getGrid(dim3 block, int width, int height, int depth);
+int MSB(size_t v);
+int LSB(size_t v);
 
 #define ERROR_STRING(str) do{\
 std::cout<<#str<<" in file "<<__FILE__<<" at line "<<__LINE__<<std::endl;\

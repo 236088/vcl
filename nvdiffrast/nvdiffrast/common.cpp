@@ -42,3 +42,39 @@ dim3 getGrid(dim3 block, int width, int height, int depth) {
     grid.z = (depth + block.z - 1) / block.z;
     return grid;
 }
+
+int MSB(size_t v) {
+    v |= (v >> 1);
+    v |= (v >> 2);
+    v |= (v >> 4);
+    v |= (v >> 8);
+    v |= (v >> 16);
+    v |= (v >> 32);
+    v ^= (v >> 1);
+    int msb = 0;
+    if (v & 0xffffffff00000000)msb += 32;
+    if (v & 0xffff0000ffff0000)msb += 16;
+    if (v & 0xff00ff00ff00ff00)msb += 8;
+    if (v & 0xf0f0f0f0f0f0f0f0)msb += 4;
+    if (v & 0xcccccccccccccccc)msb += 2;
+    if (v & 0xaaaaaaaaaaaaaaaa)msb += 1;
+    return msb;
+}
+
+int LSB(size_t v) {
+    v |= (v << 1);
+    v |= (v << 2);
+    v |= (v << 4);
+    v |= (v << 8);
+    v |= (v << 16);
+    v |= (v << 32);
+    v ^= (v << 1);
+    int msb = 0;
+    if (v & 0xffffffff00000000)msb += 32;
+    if (v & 0xffff0000ffff0000)msb += 16;
+    if (v & 0xff00ff00ff00ff00)msb += 8;
+    if (v & 0xf0f0f0f0f0f0f0f0)msb += 4;
+    if (v & 0xcccccccccccccccc)msb += 2;
+    if (v & 0xaaaaaaaaaaaaaaaa)msb += 1;
+    return msb;
+}

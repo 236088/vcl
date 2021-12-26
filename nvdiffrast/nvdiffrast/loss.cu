@@ -11,13 +11,7 @@ void Loss::init(LossParams& loss, float* target, float* predict, float* grad, in
 	CUDA_ERROR_CHECK(cudaMalloc(&loss.kernel.buffer, loss.Size()));
 	loss.block = getBlock(width, height);
 	loss.grid = getGrid(loss.block, width, height, depth);
-	int msb = 0;
-	if (loss.kernel.size & 0xffffffff00000000)msb += 32;
-	if (loss.kernel.size & 0xffff0000ffff0000)msb += 16;
-	if (loss.kernel.size & 0xff00ff00ff00ff00)msb += 8;
-	if (loss.kernel.size & 0xf0f0f0f0f0f0f0f0)msb += 4;
-	if (loss.kernel.size & 0xcccccccccccccccc)msb += 2;
-	if (loss.kernel.size & 0xaaaaaaaaaaaaaaaa)msb += 1;
+	int msb = MSB(loss.kernel.size);
 	int hmsb = msb / 2;
 	--msb;
 	loss.stride = 1 << msb;

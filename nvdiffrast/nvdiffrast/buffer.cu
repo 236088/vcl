@@ -174,17 +174,14 @@ void AttributeGrad::clear(AttributeGrad& attr) {
 
 
 void Texture::init(Texture& texture, int width, int height, int channel, int miplevel){
-    miplevel = miplevel < 1 ? 1 : (TEX_MAX_MIP_LEVEL < miplevel ? TEX_MAX_MIP_LEVEL : miplevel);
-    if (((width >> miplevel) << miplevel) != width || ((height >> miplevel) << miplevel) != height) {
-        printf("Invalid miplevel value");
-        exit(1);
-    }
+    int maxlevel = LSB(width | height) + 1;
+    if (maxlevel > TEX_MAX_MIP_LEVEL)maxlevel = TEX_MAX_MIP_LEVEL;
     texture.width = width;
     texture.height = height;
     texture.channel = channel;
-    texture.miplevel = miplevel;
+    texture.miplevel = miplevel < 1 ? 1 : (maxlevel < miplevel ? maxlevel : miplevel);
     int w = width, h = height;
-    for (int i = 0; i < miplevel; i++) {
+    for (int i = 0; i < texture.miplevel; i++) {
         CUDA_ERROR_CHECK(cudaMalloc(&texture.texture[i], (size_t)w * h * channel * sizeof(float)));
         w >>= 1; h >>= 1;
     }
@@ -217,8 +214,8 @@ __global__ void downSampling(const Texture texture, int index, int width, int he
 }
 
 void Texture::buildMIP(Texture& texture) {
-    int w = texture.width, h = texture.height;
     int i = 1;
+    int w = texture.width, h = texture.height;
     void* args[] = { &texture, &i, &w, &h };
     for (; i < texture.miplevel; i++) {
         w >>= 1; h >>= 1;
@@ -461,13 +458,13 @@ __global__ void gardAddThrough(const TextureGrad texture, int index, int width, 
 }
 
 void TextureGrad::gradSumup(TextureGrad& texture) {
-    int w = texture.width >> texture.miplevel; int h = texture.height >> texture.miplevel;
     int i = 0;
+    int w = texture.width >> (texture.miplevel - 1); int h = texture.height >> (texture.miplevel - 1);
     void* args[] = { &texture, &i, &w, &h };
     for (i = texture.miplevel - 1; i > 0; i--) {
-        w <<= 1; h <<= 1;
         dim3 block = getBlock(w, h);
         dim3 grid = getGrid(block, w, h);
         CUDA_ERROR_CHECK(cudaLaunchKernel(gardAddThrough, grid, block, args, 0, NULL));
+        w <<= 1; h <<= 1;
     }
 }

@@ -48,66 +48,6 @@ struct GLbuffer {
 	static void draw(GLbuffer& rb, GLint internalformat, GLenum format, float texminX, float texminY, float texmaxX, float texmaxY, float minX, float minY, float maxX, float maxY);
 };
 
-class PresetPrimitives {
-	int batch;
-	Matrix mat;
-
-	Attribute pos;
-	Attribute texel;
-	Attribute normal;
-	Attribute m_pos;
-	Attribute r_normal;
-	Texture target_diff;
-	Texture target_rough;
-	Texture target_nor;
-	Texture target_disp;
-	TextureGrad predict_diff;
-	TextureGrad predict_rough;
-	TextureGrad predict_nor;
-	TextureGrad predict_disp;
-
-	NormalcalcParams norm;
-	ProjectParams proj;
-	RasterizeParams rast;
-	InterpolateParams intr;
-	ProjectParams pos_proj;
-	ProjectParams normal_proj;
-	TexturemapParams target_diff_tex;
-	TexturemapParams target_rough_tex;
-	TexturemapParams target_nor_tex;
-	TexturemapParams target_disp_tex;
-	MaterialParams target_mtr;
-
-	TexturemapGradParams predict_diff_tex;
-	TexturemapGradParams predict_rough_tex;
-	TexturemapGradParams predict_nor_tex;
-	TexturemapGradParams predict_disp_tex;
-	MaterialGradParams predict_mtr;
-
-	GLbuffer target_diff_buffer;
-	GLbuffer target_rough_buffer;
-	GLbuffer target_nor_buffer;
-	GLbuffer target_mtr_buffer;
-	GLbuffer predict_diff_buffer;
-	GLbuffer predict_rough_buffer;
-	GLbuffer predict_nor_buffer;
-	GLbuffer predict_mtr_buffer;
-
-	LossParams loss;
-	AdamParams diff_adam;
-	AdamParams rough_adam;
-	AdamParams nor_adam;
-
-public:
-	const int windowWidth = 2048;
-	const int windowHeight = 1024;
-	double t;
-	void init();
-	void display(void);
-	void update(double dt);
-	float getLoss() { return Loss::loss(loss);};
-};
-
 class PresetCube {
 	Matrix mat;
 	Matrix hr_mat;
@@ -349,4 +289,64 @@ public:
 	void init();
 	void display(void);
 	void update(double dt);
+};
+
+class PresetPBR {
+	int batch;
+	Matrix mat;
+
+	Attribute pos;
+	Attribute texel;
+	Attribute normal;
+	Attribute m_pos;
+	Attribute r_normal;
+	Texture target_diff;
+	Texture target_rough;
+	Texture target_nor;
+	Texture target_disp;
+	TextureGrad predict_diff;
+	TextureGrad predict_rough;
+	TextureGrad predict_nor;
+	TextureGrad predict_disp;
+
+	NormalcalcParams norm;
+	ProjectParams proj;
+	RasterizeParams rast;
+	InterpolateParams intr;
+	ProjectParams pos_proj;
+	ProjectParams normal_proj;
+	TexturemapParams target_diff_tex;
+	TexturemapParams target_rough_tex;
+	TexturemapParams target_nor_tex;
+	TexturemapParams target_disp_tex;
+	MaterialParams target_mtr;
+
+	TexturemapGradParams predict_diff_tex;
+	TexturemapGradParams predict_rough_tex;
+	TexturemapGradParams predict_nor_tex;
+	TexturemapGradParams predict_disp_tex;
+	MaterialGradParams predict_mtr;
+
+	GLbuffer target_diff_buffer;
+	GLbuffer target_rough_buffer;
+	GLbuffer target_nor_buffer;
+	GLbuffer target_mtr_buffer;
+	GLbuffer predict_diff_buffer;
+	GLbuffer predict_rough_buffer;
+	GLbuffer predict_nor_buffer;
+	GLbuffer predict_mtr_buffer;
+
+	LossParams loss;
+	AdamParams diff_adam;
+	AdamParams rough_adam;
+	AdamParams nor_adam;
+
+public:
+	const int windowWidth = 2048;
+	const int windowHeight = 1024;
+	double t;
+	void init();
+	void display(void);
+	void update(double dt);
+	float getLoss() { return Loss::loss(loss); };
 };

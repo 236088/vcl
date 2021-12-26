@@ -19,6 +19,33 @@ void Texturemap::init(TexturemapParams& tex, RasterizeParams& rast, InterpolateP
 	}
 }
 
+__device__ __forceinline__ void calculateLevel(const TexturemapKernelParams tex, int pidx, int& level0, int& level1, float& flevel) {
+	float4 uvDA = ((float4*)tex.uvDA)[pidx];
+	float dsdx = uvDA.x * tex.texwidth;
+	float dsdy = uvDA.y * tex.texwidth;
+	float dtdx = uvDA.z * tex.texheight;
+	float dtdy = uvDA.w * tex.texheight;
+
+	// calculate footprint
+	// b is sum of 2 square sides 
+	// b = (dsdx^2+dsdy^2) + (dtdx^2+dtdy^2)
+	// c is square area
+	// c = (dsdx * dtdy - dtdx * dsdy)^2
+	// solve x^2 - bx + c = 0
+
+	float s2 = dsdx * dsdx + dsdy * dsdy;
+	float t2 = dtdx * dtdx + dtdy * dtdy;
+	float a = dsdx * dtdy - dtdx * dsdy;
+
+	float b = .5f * (s2 + t2);
+	float c = sqrt(b * b - a * a);
+
+	float level = .5f * log2f(b + c);
+	level0 = level <= 0 ? 0 : tex.miplevel - 2 <= level ? tex.miplevel - 2 : (int)floor(level);
+	level1 = level <= 1 ? 1 : tex.miplevel - 1 <= level ? tex.miplevel - 1 : (int)floor(level) + 1;
+	flevel = level <= 0 ? 0 : tex.miplevel - 1 <= level ? 1 : level - floor(level);
+}
+
 __device__ __forceinline__ int4 indexFetch(const TexturemapKernelParams tex, int level, float2 uv, float2& t) {
 	int2 size = make_int2(tex.texwidth >> level, tex.texheight >> level);
 	t.x = uv.x * (float)size.x;
@@ -46,32 +73,9 @@ __global__ void TexturemapMipForwardKernel(const TexturemapKernelParams tex) {
 
 	if (tex.rast[pidx * 4 + 3] < 1.f) return;
 
-	float4 uvDA = ((float4*)tex.uvDA)[pidx];
-	float dsdx = uvDA.x * tex.texwidth;
-	float dsdy = uvDA.y * tex.texwidth;
-	float dtdx = uvDA.z * tex.texheight;
-	float dtdy = uvDA.w * tex.texheight;
-
-	// calculate footprint
-	// b is sum of 2 square sides 
-	// b = (dsdx^2+dsdy^2) + (dtdx^2+dtdy^2)
-	// c is square area
-	// c = (dsdx * dtdy - dtdx * dsdy)^2
-	// solve x^2 - bx + c = 0
-
-	float s2 = dsdx * dsdx + dsdy * dsdy;
-	float t2 = dtdx * dtdx + dtdy * dtdy;
-	float a = dsdx * dtdy - dtdx * dsdy;
-
-	float b = .5f * (s2 + t2);
-	float c = sqrt(b * b - a * a);
-
-	float level = .5f * log2f(b + c);
-	int level0 = level <= 0 ? 0 : tex.miplevel - 2 <= level ? tex.miplevel - 2 : (int)floor(level);
-	int level1 = level <= 1 ? 1 : tex.miplevel - 1 <= level ? tex.miplevel - 1 : (int)floor(level) + 1;
-	float flevel = level <= 0 ? 0 : tex.miplevel - 1 <= level ? 1 : level - floor(level);
-
-
+	int level0, level1;
+	float flevel;
+	calculateLevel(tex, pidx, level0, level1, flevel);
 	float2 uv = ((float2*)tex.uv)[pidx];
 	float2 uv0, uv1;
 	int4 idx0 = indexFetch(tex, level0, uv, uv0);
@@ -153,7 +157,7 @@ void Texturemap::init(TexturemapGradParams& tex, RasterizeParams& rast, Interpol
 	}
 }
 
-__device__ __forceinline__ void calculateLevel(const TexturemapKernelParams tex, int pidx, int& level0, int& level1, float& flevel, float4& dleveldda) {
+__device__ __forceinline__ void calculateLevelWithJacob(const TexturemapKernelParams tex, int pidx, int& level0, int& level1, float& flevel, float4& dleveldda) {
 	float4 uvDA = ((float4*)tex.uvDA)[pidx];
 	float dsdx = uvDA.x * tex.texwidth;
 	float dsdy = uvDA.y * tex.texwidth;
@@ -233,7 +237,7 @@ __global__ void TexturemapMipBackwardKernel(const TexturemapKernelParams tex, co
 	int level0 = 0, level1 = 0;
 	float flevel = 0.f;
 	float4 dleveldda;
-	calculateLevel(tex, pidx, level0, level1, flevel, dleveldda);
+	calculateLevelWithJacob(tex, pidx, level0, level1, flevel, dleveldda);
 	float2 uv = ((float2*)tex.uv)[pidx], uv0, uv1;
 	float gu = 0.f, gv = 0.f, gl = 0.f;
 	int4 idx0 = indexFetch(tex, level0, uv, uv0);

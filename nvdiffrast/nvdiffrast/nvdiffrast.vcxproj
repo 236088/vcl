@@ -18,7 +18,7 @@
     <ClCompile Include="preset_earth.cpp" />
     <ClCompile Include="preset_filter.cpp" />
     <ClCompile Include="preset_phong.cpp" />
-    <ClCompile Include="preset_primitives.cpp" />
+    <ClCompile Include="preset_pbr.cpp" />
     <ClCompile Include="rasterize.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -1,6 +1,6 @@
 #include "preset.h"
 
-void PresetPrimitives::init() {
+void PresetPBR::init() {
 	batch = 0;
 	int width = 512;
 	int height = 512;
@@ -43,12 +43,12 @@ void PresetPrimitives::init() {
 		target_diff_tex.kernel.out, target_rough_tex.kernel.out, target_nor_tex.kernel.out, target_disp_tex.kernel.out);
 	PBRMaterial::init(target_mtr, *(float3*)&mat.eye, 1, direction, lightintensity, 2.19f);
 
-	TextureGrad::init(predict_diff, target_diff.width, target_diff.height, target_diff.channel, 4);
+	TextureGrad::init(predict_diff, target_diff.width, target_diff.height, target_diff.channel, 1);
 	TextureGrad::init(predict_rough, target_rough.width, target_rough.height, target_rough.channel, 1);
 	Texture::setColor(predict_rough, rough);
 	TextureGrad::init(predict_nor, target_nor.width, target_nor.height, target_nor.channel, 1);
 	Texture::setColor(predict_nor, nor);
-	TextureGrad::init(predict_disp, target_disp.width, target_disp.height, target_disp.channel, 3);
+	TextureGrad::init(predict_disp, target_disp.width, target_disp.height, target_disp.channel, 1);
 	Texturemap::init(predict_diff_tex, rast, intr, predict_diff);
 	Texturemap::init(predict_rough_tex, rast, intr, predict_rough);
 	Texturemap::init(predict_nor_tex, rast, intr, predict_nor);
@@ -75,7 +75,7 @@ void PresetPrimitives::init() {
 	GLbuffer::init(predict_mtr_buffer, predict_mtr.kernel.out, width, height, 3);
 }
 
-void PresetPrimitives::display(void) {
+void PresetPBR::display(void) {
 	Matrix::forward(mat);
 	Project::forward(proj);
 	Rasterize::forward(rast);
@@ -101,24 +101,22 @@ void PresetPrimitives::display(void) {
 	Texturemap::backward(predict_rough_tex);
 	Texturemap::backward(predict_nor_tex);
 
-	if ((++batch % 16 == 0)^(batch>400)) {
-		TextureGrad::gradSumup(predict_nor);
-		Adam::step(nor_adam);
-		TextureGrad::clear(predict_nor);
-		TextureGrad::buildMIP(predict_nor);
-		Texture::normalize(predict_nor);
-		TextureGrad::gradSumup(predict_rough);
-		Adam::step(rough_adam);
-		TextureGrad::clear(predict_rough);
-		Texture::clamp(predict_rough, 1e-3, 1.f);
-		TextureGrad::buildMIP(predict_rough);
-	}
-	else {
-		TextureGrad::gradSumup(predict_diff);
-		Adam::step(diff_adam);
-		TextureGrad::clear(predict_diff);
-		TextureGrad::buildMIP(predict_diff);
-	}
+	TextureGrad::gradSumup(predict_diff);
+	Adam::step(diff_adam);
+	TextureGrad::clear(predict_diff);
+	TextureGrad::buildMIP(predict_diff);
+
+	TextureGrad::gradSumup(predict_rough);
+	Adam::step(rough_adam);
+	TextureGrad::clear(predict_rough);
+	Texture::clamp(predict_rough, 1e-3, 1.f);
+	TextureGrad::buildMIP(predict_rough);
+
+	TextureGrad::gradSumup(predict_nor);
+	Adam::step(nor_adam);
+	TextureGrad::clear(predict_nor);
+	TextureGrad::buildMIP(predict_nor);
+	Texture::normalize(predict_nor);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glUseProgram(0);
@@ -136,8 +134,6 @@ void PresetPrimitives::display(void) {
 	glFlush();
 }
 
-void PresetPrimitives::update(double dt) {
-	t += dt * .25;
-	if (t > 6.2831853071795864)t -= 6.2831853071795864;
+void PresetPBR::update(double dt) {
 	Matrix::setRandomRotation(mat);
 }
