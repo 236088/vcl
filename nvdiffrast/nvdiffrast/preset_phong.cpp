@@ -27,7 +27,7 @@ void PresetPhong::init() {
 	Project::init(normal_proj, mat.r, normal, r_normal, false);
 	Texturemap::init(target_tex, rast, intr, target_texture);
 	Material::init(target_mtr, rast, pos_proj, normal_proj, &texel, 3, target_tex.kernel.out, nullptr, nullptr, nullptr);
-	float3 direction[4]{
+	float3 point[4]{
 		-2.f, -2.f, -5.f,
 		0.f, -3.f, -5.f,
 		3.f, 0.f, -5.f,
@@ -39,10 +39,10 @@ void PresetPhong::init() {
 		.5f,.5f,.5f,
 		.25f,.25f,.25f,
 	};
-	PhongMaterial::init(target_mtr, *(float3*)&mat.eye, 1, direction, lightintensity, .1f, .7f, .5f, 5.f);
+	PhongMaterial::init(target_mtr, *(float3*)&mat.eye, 1, point, lightintensity, .1f, .7f, .5f, 5.f);
 	Texturemap::init(predict_tex, rast, intr, predict_texture);
 	Material::init(predict_mtr, rast, pos_proj, normal_proj, &texel, 3, target_tex.kernel.out, predict_tex.grad.out);
-	PhongMaterial::init(predict_mtr, *(float3*)&mat.eye, 1, direction, lightintensity, 0.f, 0.f, 0.f, 1.f);
+	PhongMaterial::init(predict_mtr, *(float3*)&mat.eye, 1, point, lightintensity, 0.f, 0.f, 0.f, 1.f);
 	Loss::init(loss, target_mtr.kernel.out, predict_mtr.kernel.out, predict_mtr.grad.out, width, height, 3);
 	
 	Optimizer::init(mtr_adam, predict_mtr.kernel.params, predict_mtr.grad.params, 4, 4, 1, 1);
@@ -55,7 +55,7 @@ void PresetPhong::init() {
 	//Texture::setColor(white, color);
 	//Texturemap::init(white_tex, rast, intr, white);
 	//Material::init(white_mtr, rast, pos_proj, normal_proj, &texel, 3, white_tex.kernel.out);
-	//PhongMaterial::init(white_mtr, *(float3*)&mat.eye, 1, direction, lightintensity, 0.f, 0.f, 0.f, 0.f);
+	//PhongMaterial::init(white_mtr, *(float3*)&mat.eye, 1, point, lightintensity, 0.f, 0.f, 0.f, 0.f);
 	//cudaFree(white_mtr.kernel.params);
 	//white_mtr.kernel.params = predict_mtr.kernel.params;
 

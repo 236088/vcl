@@ -5,11 +5,12 @@ double t;
 float loss_sum = 0;
 bool play = false;
 
-PresetPBR preset;
+//PresetPBR preset;
 //PresetCube preset;
 //PresetEarth preset;
 //PresetFilter preset;
 //PresetPhong preset;
+PresetPrimitives preset;
 
 
 static void InitFunc()

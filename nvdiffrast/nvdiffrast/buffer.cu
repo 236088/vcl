@@ -1,5 +1,69 @@
 #include "buffer.h"
 
+void Buffer::init(Buffer& buf, int num, int dimention) {
+    buf.num = num;
+    buf.dimention = dimention;
+    CUDA_ERROR_CHECK(cudaMalloc(&buf.buffer, buf.Size()));
+}
+
+void Buffer::init(Buffer& buf, Buffer& src, int dimention) {
+    Buffer::init(buf, src.num, dimention);
+}
+
+void Buffer::copy(Buffer& dst, Buffer& src) {
+    CUDA_ERROR_CHECK(cudaMemcpy(dst.buffer, src.buffer, dst.Size(), cudaMemcpyDeviceToDevice));
+}
+
+void Buffer::copy(Buffer& dst, float* src) {
+    CUDA_ERROR_CHECK(cudaMemcpy(dst.buffer, src, dst.Size(), cudaMemcpyHostToDevice));
+}
+
+__global__ void BufferLinerKernel(float* buffer, float w, float b, int width, int height) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * py;
+    buffer[pidx] = buffer[pidx] * w + b;
+}
+
+void Buffer::liner(Buffer& buf, float w, float b) {
+    dim3 block = getBlock(buf.num, buf.dimention);
+    dim3 grid = getGrid(block, buf.num, buf.dimention);
+    void* args[] = { &buf.buffer, &w,&b,&buf.num,&buf.dimention };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferLinerKernel, grid, block, args, 0, NULL));
+}
+
+__global__ void BufferRandomKernel(float* buffer, float min, float max, int width, int height, unsigned int seed) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * py;
+    buffer[pidx] += min + (max - min) * getUniform(pidx, seed, 0xba5ec0de);
+}
+
+void Buffer::addRandom(Buffer& buf, float min, float max) {
+    unsigned int seed = rand();
+    dim3 block = getBlock(buf.num, buf.dimention);
+    dim3 grid = getGrid(block, buf.num, buf.dimention);
+    void* args[] = { &buf.buffer,&min,&max,&buf.num,&buf.dimention, &seed };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferRandomKernel, grid, block, args, 0, NULL));
+}
+
+void BufferGrad::init(BufferGrad& buf, int num, int dimention) {
+    Buffer::init(buf, num, dimention);
+    CUDA_ERROR_CHECK(cudaMalloc(&buf.grad, buf.Size()));
+}
+
+void BufferGrad::init(BufferGrad& buf, Buffer& src, int dimention) {
+    init(buf, src.num, dimention);
+}
+
+void BufferGrad::clear(BufferGrad& buf) {
+    CUDA_ERROR_CHECK(cudaMemset(buf.grad, 0, buf.Size()));
+}
+
+
+
 void Attribute::init(Attribute& attr, int vboNum, int vaoNum, int dimention) {
     attr.dimention = dimention;
     attr.vboNum = vboNum;
@@ -126,27 +190,11 @@ void Attribute::copy(Attribute& dst, Attribute& src) {
     if(dst.vao!=src.vao)cudaMemcpy(dst.vao, src.vao, dst.vaoSize(), cudaMemcpyDeviceToDevice);
 }
 
-__global__ void AttributeLinerKernel(float* attr, float w, float b, int width, int height) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * py;
-    attr[pidx] = attr[pidx] * w + b;
-}
-
 void Attribute::liner(Attribute& attr, float w, float b) {
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
     void* args[] = { &attr.vbo, &w,&b,&attr.vboNum,&attr.dimention };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(AttributeLinerKernel, grid, block, args, 0, NULL));
-}
-
-__global__ void AttributeRandomKernel(float* buffer, float min, float max, int width, int height, unsigned int seed) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * py;
-    buffer[pidx] += min + (max - min) * getUniform(pidx, seed, 0xba5ec0de);
+    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferLinerKernel, grid, block, args, 0, NULL));
 }
 
 void Attribute::addRandom(Attribute& attr, float min, float max) {
@@ -154,7 +202,7 @@ void Attribute::addRandom(Attribute& attr, float min, float max) {
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
     void* args[] = { &attr.vbo,&min,&max,&attr.vboNum,&attr.dimention, &seed };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(AttributeRandomKernel, grid, block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferRandomKernel, grid, block, args, 0, NULL));
 }
 
 void AttributeGrad::init(AttributeGrad& attr, int vboNum, int vaoNum, int dimention) {

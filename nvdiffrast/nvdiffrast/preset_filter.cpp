@@ -1,9 +1,9 @@
 #include "preset.h"
 
 #define CONSOLE_INTERVAL 10
-#define EXIT_COUNT 1000
+#define EXIT_COUNT 10000
 
-void PresetFilter::Pass::init(Attribute& predict_pos,Attribute& predict_color,Matrix& mat, FilterParams& target_flt,Matrix& hr_mat,int resolution, int k) {
+void PresetFilter::Pass::init(Attribute& predict_pos,Attribute& predict_color,Matrix& mat, FilterParams& target_flt,Matrix& hr_mat,int resolution, float sigma) {
 	AttributeGrad::init(pos, predict_pos.vboNum, predict_pos.vaoNum, 3);
 	Attribute::copy(pos, predict_pos);
 	AttributeGrad::init(color, pos, 3);
@@ -13,13 +13,15 @@ void PresetFilter::Pass::init(Attribute& predict_pos,Attribute& predict_color,Ma
 	Rasterize::init(rast, proj, resolution, resolution, 1, false);
 	Interpolate::init(intr, rast, color);
 	Antialias::init(aa, rast, proj, intr.kernel.out, intr.grad.out, 3);
-	GaussianFilter::init(flt, rast, aa.kernel.out, aa.grad.out, 3, k);
+	Filter::init(flt, rast, aa.kernel.out, aa.grad.out, 3, sigma);
 
 	Loss::init(loss, target_flt.kernel.out, flt.kernel.out, flt.grad.out, resolution, resolution, 3);
 	Optimizer::init(adam_pos, pos);
 	Optimizer::init(adam_color, color);
+	Optimizer::init(adam_sigma, flt.kernel.sigma, flt.grad.sigma, 1, 1, 1, 1);
 	Adam::setHyperParams(adam_pos, 1e-2, 0.9, 0.999, 1e-8);
 	Adam::setHyperParams(adam_color, 1e-2, 0.9, 0.999, 1e-8);
+	Adam::setHyperParams(adam_sigma, 1e-2, 0.9, 0.999, 1e-8);
 
 	Project::init(hr_proj, hr_mat.mvp, pos, true);
 	Rasterize::init(hr_rast, hr_proj, 512, 512, 1, false);
@@ -45,6 +47,7 @@ void PresetFilter::Pass::forward() {
 	Project::backward(proj);
 	Adam::step(adam_pos);
 	Adam::step(adam_color);
+	Adam::step(adam_sigma);
 	AttributeGrad::clear(pos);
 	AttributeGrad::clear(color);
 
@@ -64,7 +67,7 @@ void PresetFilter::init() {
 	step = 0;
 	file.open("../../filter_log.txt");
 	file << "step, nofilter, 4x4, 16x16" << std::endl;
-	int resolution = 16;
+	int resolution = 64;
 	Matrix::init(mat);
 	Matrix::setEye(mat, 3.f, 2.f, 3.f);
 	Matrix::setFovy(mat, 45.f);
@@ -107,10 +110,10 @@ void PresetFilter::init() {
 	Interpolate::init(hr_predict_intr, hr_predict_rast, predict_color);
 	Antialias::init(hr_predict_aa, hr_predict_rast, hr_predict_proj, hr_predict_intr.kernel.out, 3);
 
-	GaussianFilter::init(target_flt1, target_rast, target_aa.kernel.out, 3, 4);
+	Filter::init(target_flt1, target_rast, target_aa.kernel.out, 3, .5f);
 	predict1.init(predict_pos, predict_color, mat, target_flt1, hr_mat, resolution, 4);
-	GaussianFilter::init(target_flt2, target_rast, target_aa.kernel.out, 3, 16);
-	predict2.init(predict_pos, predict_color, mat, target_flt2, hr_mat, resolution, 16);
+	Filter::init(target_flt2, target_rast, target_aa.kernel.out, 3, 8);
+	predict2.init(predict_pos, predict_color, mat, target_flt2, hr_mat, resolution, 4);
 
 	GLbuffer::init(gl_hr_target, hr_target_aa.kernel.out, 512, 512, 3);
 	GLbuffer::init(gl_predict, predict_aa.kernel.out, resolution, resolution, 3);

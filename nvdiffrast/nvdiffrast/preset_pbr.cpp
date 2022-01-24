@@ -5,7 +5,7 @@ void PresetPBR::init() {
 	int width = 512;
 	int height = 512;
 	t = 0.f;
-	float3 direction[4]{
+	float3 point[4]{
 		0.f, -2.f, -1.f,
 		0.f, -3.f, -5.f,
 		3.f, 0.f, -5.f,
@@ -41,7 +41,7 @@ void PresetPBR::init() {
 	Texturemap::init(target_disp_tex, rast, intr, target_disp);
 	Material::init(target_mtr, rast, pos_proj, normal_proj, &texel, 3,
 		target_diff_tex.kernel.out, target_rough_tex.kernel.out, target_nor_tex.kernel.out, target_disp_tex.kernel.out);
-	PBRMaterial::init(target_mtr, *(float3*)&mat.eye, 1, direction, lightintensity, 2.19f);
+	PBRMaterial::init(target_mtr, *(float3*)&mat.eye, 1, point, lightintensity, 2.19f);
 
 	TextureGrad::init(predict_diff, target_diff.width, target_diff.height, target_diff.channel, 1);
 	TextureGrad::init(predict_rough, target_rough.width, target_rough.height, target_rough.channel, 1);
@@ -56,7 +56,7 @@ void PresetPBR::init() {
 	Material::init(predict_mtr, rast, pos_proj, normal_proj, &texel, 3,
 		predict_diff_tex.kernel.out, predict_rough_tex.kernel.out, predict_nor_tex.kernel.out, predict_disp_tex.kernel.out,
 		predict_diff_tex.grad.out, predict_rough_tex.grad.out, predict_nor_tex.grad.out, predict_disp_tex.grad.out);
-	PBRMaterial::init(predict_mtr, *(float3*)&mat.eye, 1, direction, lightintensity, 2.19f);
+	PBRMaterial::init(predict_mtr, *(float3*)&mat.eye, 1, point, lightintensity, 2.19f);
 	Loss::init(loss, target_mtr.kernel.out, predict_mtr.kernel.out, predict_mtr.grad.out, width, height, 3);
 	Optimizer::init(diff_adam, predict_diff);
 	Optimizer::init(rough_adam, predict_rough);

@@ -10,6 +10,7 @@ struct FilterKernelParams {
 	int channel;
 	int k;
 
+	float* sigma;
 	float* filter;
 	float* in;
 	float* buf;
@@ -19,6 +20,11 @@ struct FilterKernelParams {
 
 struct FilterKernelGradParams {
 	float* in;
+	float* sigma;
+	float* filter;
+	float* buf;
+	float* bufx;
+	float* bufy;
 
 	float* out;
 };
@@ -33,23 +39,10 @@ struct FilterGradParams :FilterParams {
 };
 
 class Filter {
-protected:
-	static void init(FilterParams& flt, RasterizeParams& rast, float* in, int channel, int k);
-	static void init(FilterGradParams& flt, RasterizeParams& rast, float* in, float* grad, int channel, int k);
 public:
+	static void init(FilterParams& flt, RasterizeParams& rast, float* in, int channel, float sigma);
+	static void init(FilterGradParams& flt, RasterizeParams& rast, float* in, float* grad, int channel, float sigma);
 	static void forward(FilterParams& flt);
 	static void forward(FilterGradParams& flt);
 	static void backward(FilterGradParams& flt);
-};
-
-class GaussianFilter :Filter {
-public:
-	static void init(FilterParams& flt, RasterizeParams& rast, float* in, int channel, int k);
-	static void init(FilterGradParams& flt, RasterizeParams& rast, float* in, float* grad, int channel, int k);
-};
-
-class MeanFilter:Filter {
-public:
-	static void init(FilterParams& flt, RasterizeParams& rast, float* in, int channel, int k);
-	static void init(FilterGradParams& flt, RasterizeParams& rast, float* in, float* grad, int channel, int k);
 };

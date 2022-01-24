@@ -39,18 +39,12 @@ void Material::init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& p
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.out, mtr.Size()));
 }
 
-void Material::init(MaterialParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, int paramsNum, float* params) {
+void Material::init(MaterialParams& mtr, float3 eye, int lightNum, float3* point, float* lightintensity, int paramsNum, float* params) {
     mtr.kernel.eye = eye;
     mtr.kernel.lightNum = lightNum;
     mtr.kernel.paramsNum = paramsNum;
-    for (int i = 0; i < lightNum; i++) {
-        float r = 1.f / sqrt(direction[i].x * direction[i].x + direction[i].y * direction[i].y + direction[i].z * direction[i].z);
-        direction[i].x *= r;
-        direction[i].y *= r;
-        direction[i].z *= r;
-    }
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.direction, (size_t)lightNum * sizeof(float3)));
-    CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.direction, direction, (size_t)lightNum * sizeof(float3), cudaMemcpyHostToDevice));
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.point, (size_t)lightNum * sizeof(float3)));
+    CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.point, point, (size_t)lightNum * sizeof(float3), cudaMemcpyHostToDevice));
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.lightintensity, (size_t)lightNum * mtr.kernel.channel * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMemcpy(mtr.kernel.lightintensity, lightintensity, (size_t)lightNum * mtr.kernel.channel * sizeof(float), cudaMemcpyHostToDevice));
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.params, (size_t)paramsNum * sizeof(float)));
@@ -72,29 +66,29 @@ void Material::init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParam
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.out, mtr.Size()));
 }
 
-void Material::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, int paramsNum, float* params) {
-    Material::init((MaterialParams&)mtr, eye, lightNum, direction, lightintensity, paramsNum, params);
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.direction, (size_t)mtr.kernel.lightNum * sizeof(float3)));
+void Material::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* point, float* lightintensity, int paramsNum, float* params) {
+    Material::init((MaterialParams&)mtr, eye, lightNum, point, lightintensity, paramsNum, params);
+    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.point, (size_t)mtr.kernel.lightNum * sizeof(float3)));
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.lightintensity, (size_t)mtr.kernel.lightNum * mtr.kernel.channel * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.params, (size_t)mtr.kernel.paramsNum * sizeof(float)));
 }
 
 void Material::clear(MaterialGradParams& mtr) {
-    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.direction, 0, (size_t)mtr.kernel.lightNum * sizeof(float3)));
+    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.point, 0, (size_t)mtr.kernel.lightNum * sizeof(float3)));
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.lightintensity, 0, (size_t)mtr.kernel.lightNum * mtr.kernel.channel * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.params, 0, (size_t)mtr.kernel.paramsNum * sizeof(float)));
 };
 
 
 
-void PhongMaterial::init(MaterialParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, float Ka, float Kd, float Ks, float shininess) {
+void PhongMaterial::init(MaterialParams& mtr, float3 eye, int lightNum, float3* point, float* lightintensity, float Ka, float Kd, float Ks, float shininess) {
     float params[4]{ Ka, Kd,  Ks,  shininess };
-    Material::init(mtr, eye, lightNum, direction, lightintensity, 4, params);
+    Material::init(mtr, eye, lightNum, point, lightintensity, 4, params);
 }
 
-void PhongMaterial::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, float Ka, float Kd, float Ks, float shininess) {
+void PhongMaterial::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* point, float* lightintensity, float Ka, float Kd, float Ks, float shininess) {
     float params[4]{ Ka, Kd,  Ks,  shininess };
-    Material::init(mtr, eye, lightNum, direction, lightintensity, 4, params);
+    Material::init(mtr, eye, lightNum, point, lightintensity, 4, params);
 }
 
 __global__ void PhongMaterialForwardKernel(const MaterialKernelParams mtr) {
@@ -124,8 +118,11 @@ __global__ void PhongMaterialForwardKernel(const MaterialKernelParams mtr) {
     float Ks = mtr.params[2];
     float shininess = mtr.params[3];
 
+    for (int k = 0; k < mtr.channel; k++) {
+        mtr.out[pidx * mtr.channel + k] += mtr.diffusemap[pidx * mtr.channel + k] * Ka;
+    }
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = -mtr.direction[i];
+        float3 l = normalize(mtr.point[i] - pos);
         float ln = dot(l, n);
         float3 r = 2.f * ln * n - l;
         float rv = dot(r, v);
@@ -134,7 +131,7 @@ __global__ void PhongMaterialForwardKernel(const MaterialKernelParams mtr) {
             float intensity = mtr.lightintensity[i * mtr.channel + k];
             float diffuse = intensity * max(ln, 0.f);
             float specular = intensity * powrv;
-            mtr.out[pidx * mtr.channel + k] += mtr.diffusemap[pidx * mtr.channel + k] * (Ka + Kd * diffuse + Ks * specular);
+            mtr.out[pidx * mtr.channel + k] += mtr.diffusemap[pidx * mtr.channel + k] * (Kd * diffuse + Ks * specular);
         }
     }
 }
@@ -180,8 +177,7 @@ __global__ void PhongMaterialBackwardKernel(const MaterialKernelParams mtr, cons
     float Ks = mtr.params[2];
 
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 direction = -mtr.direction[i];
-        float3 l = normalize(direction - pos);
+        float3 l = normalize(mtr.point[i] - pos);
         float ln = dot(l, n);
         float3 r = 2.f * ln * n - l;
         float rv = dot(r, v);
@@ -212,14 +208,14 @@ void PhongMaterial::backward(MaterialGradParams& mtr) {
 
 
 
-void PBRMaterial::init(MaterialParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, float ior) {
+void PBRMaterial::init(MaterialParams& mtr, float3 eye, int lightNum, float3* point, float* lightintensity, float ior) {
     float params[1]{ ior };
-    Material::init(mtr, eye, lightNum, direction, lightintensity, 1, params);
+    Material::init(mtr, eye, lightNum, point, lightintensity, 1, params);
 }
 
-void PBRMaterial::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* direction, float* lightintensity, float ior) {
+void PBRMaterial::init(MaterialGradParams& mtr, float3 eye, int lightNum, float3* point, float* lightintensity, float ior) {
     float params[1]{ ior };
-    Material::init(mtr, eye, lightNum, direction, lightintensity, 1, params);
+    Material::init(mtr, eye, lightNum, point, lightintensity, 1, params);
 }
 
 //
@@ -312,7 +308,7 @@ __global__ void PBRMaterialForwardKernel(const MaterialKernelParams mtr) {
     float nv = max(dot(n, v), 1e-3);
     float Vv = 1.f / (nv + sqrt(m2 + nv * nv * (1.f - m2)));
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = -mtr.direction[i];
+        float3 l = normalize(mtr.point[i] - pos);
         float3 h = normalize(l + v);
         float lh = max(dot(l, h), 0.f);
         float g = sqrt(ior2 + lh * lh);
@@ -346,7 +342,7 @@ void PBRMaterial::forward(MaterialParams& mtr) {
 
 void PBRMaterial::forward(MaterialGradParams& mtr) {
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.out, 0, mtr.Size()));
-    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.direction, 0, (size_t)mtr.kernel.lightNum * sizeof(float3)));
+    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.point, 0, (size_t)mtr.kernel.lightNum * sizeof(float3)));
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.lightintensity, 0, (size_t)mtr.kernel.lightNum * mtr.kernel.channel * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMemset(mtr.grad.params, 0, sizeof(float)));
     forward((MaterialParams&)mtr);
@@ -397,7 +393,7 @@ __global__ void PBRMaterialBackwardKernel(const MaterialKernelParams mtr, const 
     kv *= (v2 - 1.f);
     float3 dLdn = make_float3(0.f, 0.f, 0.f);
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = -mtr.direction[i];
+        float3 l = normalize(mtr.point[i] - pos);
         float3 h = normalize(l + v);
 
         float nh = max(dot(n, h), 0.f);

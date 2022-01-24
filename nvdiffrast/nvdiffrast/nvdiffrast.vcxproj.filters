@@ -24,6 +24,7 @@
     <ClCompile Include="preset_earth.cpp" />
     <ClCompile Include="preset_filter.cpp" />
     <ClCompile Include="preset_phong.cpp" />
+    <ClCompile Include="preset_primitives.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="antialias.h" />

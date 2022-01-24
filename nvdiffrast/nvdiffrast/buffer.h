@@ -3,6 +3,26 @@
 
 #define TEX_MAX_MIP_LEVEL 16
 
+struct Buffer {
+	float* buffer;
+	int num;
+	int dimention;
+	size_t Size() { return (size_t)num * dimention * sizeof(float); };
+	static void init(Buffer& buf, int num, int dimention);
+	static void init(Buffer& buf, Buffer& src, int dimention);
+	static void copy(Buffer& dst, Buffer& src);
+	static void copy(Buffer& dst, float* src);
+	static void liner(Buffer& buf, float w, float b);
+	static void addRandom(Buffer& buf, float min, float max);
+};
+
+struct BufferGrad :Buffer {
+	float* grad;
+	static void init(BufferGrad& buf, int num, int dimention);
+	static void init(BufferGrad& buf, Buffer& src, int dimention);
+	static void clear(BufferGrad& buf);
+};
+
 struct Attribute {
 	float* vbo;
 	unsigned int* vao;

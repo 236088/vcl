@@ -48,6 +48,40 @@ struct GLbuffer {
 	static void draw(GLbuffer& rb, GLint internalformat, GLenum format, float texminX, float texminY, float texmaxX, float texmaxY, float minX, float minY, float maxX, float maxY);
 };
 
+
+class PresetPrimitives {
+	Matrix mat;
+
+	Attribute pos;
+	Attribute texel;
+	Attribute normal;
+	Texture texture;
+
+	ProjectParams proj;
+	RasterizeParams rast;
+	InterpolateParams intr;
+	ProjectParams pos_proj;
+	ProjectParams normal_proj;
+	TexturemapParams tex;
+	MaterialParams mtr;
+	AntialiasParams aa;
+	FilterParams flt;
+
+	GLbuffer rast_buffer;
+	GLbuffer intr_buffer;
+	GLbuffer tex_buffer;
+	GLbuffer mtr_buffer;
+	GLbuffer aa_buffer;
+	GLbuffer flt_buffer;
+
+public:
+	const int windowWidth = 1024;
+	const int windowHeight = 512;
+	void init();
+	void display();
+	void update(double dt);
+};
+
 class PresetCube {
 	Matrix mat;
 	Matrix hr_mat;
@@ -220,8 +254,9 @@ class PresetFilter {
 		LossParams loss;
 		AdamParams adam_pos;
 		AdamParams adam_color;
+		AdamParams adam_sigma;
 	public:
-		void init(Attribute& predict_pos, Attribute& predict_color, Matrix& mat, FilterParams& target_flt, Matrix& hr_mat, int resolution, int k);
+		void init(Attribute& predict_pos, Attribute& predict_color, Matrix& mat, FilterParams& target_flt, Matrix& hr_mat, int resolution, float sigma);
 		void forward();
 		void draw(float minX, float maxX);
 		float getLoss() { return Loss::loss(loss); };
