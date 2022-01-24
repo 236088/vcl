@@ -12,6 +12,11 @@ void Optimizer::init(OptimizeParams& opt, float* param, float* grad, int size, i
 	opt.grid = getGrid(opt.block, width, height, depth);
 }
 
+void Optimizer::init(OptimizeParams& opt, BufferGrad& buf) {
+	int size = buf.num * buf.dimention;
+	init(opt, buf.buffer, buf.grad, size, buf.num, buf.dimention, 1);
+}
+
 void Optimizer::init(OptimizeParams& opt, AttributeGrad& attr) {
 	int size = attr.vboNum * attr.dimention;
 	init(opt, attr.vbo, attr.grad, size, attr.vboNum, attr.dimention, 1);

@@ -24,6 +24,7 @@ struct OptimizeParams {
 class Optimizer {
 public:
 	static void init(OptimizeParams& opt, float* param, float* grad, int size, int width, int height, int depth);
+	static void init(OptimizeParams& opt, BufferGrad& buf);
 	static void init(OptimizeParams& opt, AttributeGrad& attr);
 	static void init(OptimizeParams& opt, TextureGrad& texture);
 	static void randomParams(OptimizeParams& opt, float min, float max);

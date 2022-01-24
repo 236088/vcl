@@ -14,6 +14,7 @@ struct Buffer {
 	static void copy(Buffer& dst, float* src);
 	static void liner(Buffer& buf, float w, float b);
 	static void addRandom(Buffer& buf, float min, float max);
+	static void clamp(Buffer& buf, float min, float max);
 };
 
 struct BufferGrad :Buffer {

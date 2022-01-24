@@ -6,92 +6,82 @@
 void PresetPhong::init() {
 	loss_sum = 0.f;
 	step = 0;
+	t = 0;
 	file.open("../../phong_log.txt");
 	file << "step, predict" << std::endl;
 	int width = 512;
 	int height = 512;
-	Attribute::loadOBJ("../../spot_triangulated.obj", &pos, &texel, nullptr);
+	Attribute::loadOBJ("../../spot_triangulated.obj", &pos, &texel, &normal);
 	Texture::loadBMP("../../spot_texture.bmp", target_texture, 4);
-	TextureGrad::init(predict_texture, target_texture.width, target_texture.height, target_texture.channel, 4);
-	float color[3] = { 1.f,1.f,1.f };
-	Texture::setColor(predict_texture, color);
 	Matrix::init(mat);
-	Matrix::setRotation(mat, 180.f, 0.f, 1.f, 0.f);
+	Matrix::setRotation(mat, 135.f, 0.f, 1.f, 0.f);
 	Matrix::setFovy(mat, 30.f);
 	Matrix::setEye(mat, 0.f, 0.f, 4.f);
 	Project::init(proj, mat.mvp, pos, true);
 	Rasterize::init(rast, proj, width, height, 1, true);
 	Interpolate::init(intr, rast, texel);
 	Project::init(pos_proj, mat.m, pos, m_pos, false);
-	Normalcalc::init(norm, pos, normal);
 	Project::init(normal_proj, mat.r, normal, r_normal, false);
 	Texturemap::init(target_tex, rast, intr, target_texture);
-	Material::init(target_mtr, rast, pos_proj, normal_proj, &texel, 3, target_tex.kernel.out, nullptr, nullptr, nullptr);
-	float3 point[4]{
-		-2.f, -2.f, -5.f,
-		0.f, -3.f, -5.f,
-		3.f, 0.f, -5.f,
-		0.f, 3.f, -5.f,
+
+	float _point[12]{
+		2.f,2.f,2.f,
+		2.f,-2.f,-2.f,
+		-2.f,2.f,-2.f,
+		-2.f,-2.f,2.f,
 	};
-	float lightintensity[12]{
+	float _intensity[12]{
 		1.f,1.f,1.f,
 		1.f,1.f,1.f,
-		.5f,.5f,.5f,
-		.25f,.25f,.25f,
+		1.f,1.f,1.f,
+		1.f,1.f,1.f,
 	};
-	PhongMaterial::init(target_mtr, *(float3*)&mat.eye, 1, point, lightintensity, .1f, .7f, .5f, 5.f);
-	Texturemap::init(predict_tex, rast, intr, predict_texture);
-	Material::init(predict_mtr, rast, pos_proj, normal_proj, &texel, 3, target_tex.kernel.out, predict_tex.grad.out);
-	PhongMaterial::init(predict_mtr, *(float3*)&mat.eye, 1, point, lightintensity, 0.f, 0.f, 0.f, 1.f);
+	float _params[4]{
+		.1f, .5f, .5f, 10.f
+	};
+	Buffer::init(target_point, 1, 3);
+	Buffer::init(target_intensity, 1, 3);
+	Buffer::init(target_params, 4, 1);
+	Buffer::copy(target_point, _point);
+	Buffer::copy(target_intensity, _intensity);
+	Buffer::copy(target_params, _params);
+	Material::init(target_mtr, rast, pos_proj, normal_proj, &texel, 3, target_tex.kernel.out);
+	Material::init(target_mtr, *(float3*)&mat.eye, target_point, target_intensity);
+	Material::init(target_mtr, target_params);
+	Buffer::init(predict_point, 1, 3);
+	Buffer::init(predict_intensity, 1, 3);
+	Buffer::copy(predict_point, _point);
+	Buffer::copy(predict_intensity, _intensity);
+	BufferGrad::init(predict_params, 4, 1);
+	Buffer::liner(predict_params, 0.f, 1.f);
+	Material::init(predict_mtr, rast, pos_proj, normal_proj, &texel, 3, target_tex.kernel.out, nullptr);
+	Material::init(predict_mtr, *(float3*)&mat.eye, predict_point, predict_intensity);
+	Material::init(predict_mtr, predict_params);
 	Loss::init(loss, target_mtr.kernel.out, predict_mtr.kernel.out, predict_mtr.grad.out, width, height, 3);
 	
-	Optimizer::init(mtr_adam, predict_mtr.kernel.params, predict_mtr.grad.params, 4, 4, 1, 1);
-	Adam::setHyperParams(mtr_adam, 1e-2, .9, .999, 1e-8);
-	//Optimizer::randomParams(mtr_adam, 1e-3, 1.f);
-	//Optimizer::init(tex_adam, predict_texture);
-	//Adam::setHyperParams(tex_adam, 1e-3, .9, .999, 1e-8);
-
-	//Texture::init(white, predict_texture.width, predict_texture.height, predict_texture.channel, 1);
-	//Texture::setColor(white, color);
-	//Texturemap::init(white_tex, rast, intr, white);
-	//Material::init(white_mtr, rast, pos_proj, normal_proj, &texel, 3, white_tex.kernel.out);
-	//PhongMaterial::init(white_mtr, *(float3*)&mat.eye, 1, point, lightintensity, 0.f, 0.f, 0.f, 0.f);
-	//cudaFree(white_mtr.kernel.params);
-	//white_mtr.kernel.params = predict_mtr.kernel.params;
+	Optimizer::init(params_adam, predict_params);
+	Adam::setHyperParams(params_adam, 5e-2, .9, .999, 1e-8);
 
 	GLbuffer::init(target_buffer, target_mtr.kernel.out, width, height, 3);
 	GLbuffer::init(predict_buffer, predict_mtr.kernel.out, width, height, 3);
-	//GLbuffer::init(white_buffer, white_mtr.kernel.out, width, height, 3);
-	//GLbuffer::init(tex_buffer, predict_texture.texture[0], predict_texture.width,predict_texture.height, 3);
-}
 
-void PresetPhong::display(void) {
 	Matrix::forward(mat);
 	Project::forward(proj);
 	Rasterize::forward(rast);
 	Interpolate::forward(intr);
 	Project::forward(pos_proj);
-	Normalcalc::forward(norm);
 	Project::forward(normal_proj);
 	Texturemap::forward(target_tex);
 	PhongMaterial::forward(target_mtr);
+}
 
-	//Texturemap::forward(predict_tex);
+void PresetPhong::display(void) {
+	BufferGrad::clear(predict_params);
 	PhongMaterial::forward(predict_mtr);
 	MSELoss::backward(loss);
 	PhongMaterial::backward(predict_mtr);
-	//Texturemap::backward(predict_tex);
-
-	//Texturemap::forward(white_tex);
-	//PhongMaterial::forward(white_mtr);
-
-	//TextureGrad::gradSumup(predict_texture);
-	//Adam::step(tex_adam);
-	//Texture::buildMIP(predict_texture);
-	//TextureGrad::clear(predict_texture);
-	Adam::step(mtr_adam);
-	Material::clear(predict_mtr);
-
+	Adam::step(params_adam);
+	Buffer::clamp(predict_params, 1e-3, 1e+3);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glUseProgram(0);
@@ -100,13 +90,12 @@ void PresetPhong::display(void) {
 	glEnable(GL_TEXTURE_2D);
 	GLbuffer::draw(target_buffer, GL_RGB32F, GL_RGB,0.f, -1.f, 1.f, 1.f);
 	GLbuffer::draw(predict_buffer, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 1.f );
-	//GLbuffer::draw(white_buffer, GL_RGB32F, GL_RGB,0.f, -1.f, 1.f, 0.f);
-	//GLbuffer::draw(tex_buffer, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 0.f );
 	glFlush();
 }
 
 void PresetPhong::update(double dt) {
 	loss_sum += Loss::loss(loss);
+	t += dt;
 	if ((++step) % CONSOLE_INTERVAL == 0) {
 		std::cout << step << "," << loss_sum / CONSOLE_INTERVAL << std::endl;
 		file << step << "," << loss_sum / CONSOLE_INTERVAL << std::endl;
@@ -116,5 +105,6 @@ void PresetPhong::update(double dt) {
 		file.close();
 		exit(0);
 	}
-	Matrix::addRotation(mat, .25f, 0.f, 1.f, 0.f);
+	//Matrix::setEye(mat, 4 * sin(t), 0.f, 4 * cos(t));
+	//Matrix::addRotation(mat, 1.f, 0.f, 1.f, 0.f);
 }

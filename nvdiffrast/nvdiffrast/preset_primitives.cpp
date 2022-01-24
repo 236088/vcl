@@ -15,28 +15,34 @@ void PresetPrimitives::init() {
 	Texturemap::init(tex, rast, intr, texture);
 	Project::init(pos_proj, mat.m, pos, false);
 	Project::init(normal_proj, mat.r, normal, false);
-	Material::init(mtr, rast, pos_proj, normal_proj, &texel, 3, tex.kernel.out);
-	float3 point[8]{
-		2.f,2.f,2.f,
-		-2.f,2.f,2.f,
-		2.f,-2.f,2.f,
-		-2.f,-2.f,2.f,
-		2.f,2.f,-2.f,
-		-2.f,2.f,-2.f,
-		2.f,-2.f,-2.f,
-		-2.f,-2.f,-2.f,
+	float _point[18]{
+		2.f,0.f,0.f,
+		-2.f,0.f,0.f,
+		0.f,2.f,0.f,
+		0.f,-2.f,0.f,
+		0.f,0.f,2.f,
+		0.f,0.f,-2.f,
 	};
-	float intensity[24]{
-		0.f,0.f,0.f,
-		1.f,1.f,0.f,
-		1.f,0.f,1.f,
-		0.f,1.f,1.f,
+	float _intensity[18]{
 		1.f,0.f,0.f,
+		0.f,1.f,1.f,
 		0.f,1.f,0.f,
+		1.f,0.f,1.f,
 		0.f,0.f,1.f,
-		1.f,1.f,1.f,
+		1.f,1.f,0.f,
 	};
-	PhongMaterial::init(mtr, *(float3*)&mat.eye, 8, point, intensity,  .3f, .5f, .7f, 10.f);
+	float _params[4]{
+		.1f, .5f, .7f, 10.f
+	};
+	Buffer::init(point, 6, 3);
+	Buffer::init(intensity, 6, 3);
+	Buffer::init(params, 4, 1);
+	Buffer::copy(point, _point);
+	Buffer::copy(intensity, _intensity);
+	Buffer::copy(params, _params);
+	Material::init(mtr, rast, pos_proj, normal_proj, &texel, 3, tex.kernel.out);
+	Material::init(mtr, *(float3*)&mat.eye, point, intensity);
+	Material::init(mtr, params);
 	Antialias::init(aa, rast, proj, mtr.kernel.out, 3);
 	Filter::init(flt, rast, aa.kernel.out, 3, 4);
 

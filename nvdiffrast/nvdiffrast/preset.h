@@ -56,6 +56,9 @@ class PresetPrimitives {
 	Attribute texel;
 	Attribute normal;
 	Texture texture;
+	Buffer point;
+	Buffer intensity;
+	Buffer params;
 
 	ProjectParams proj;
 	RasterizeParams rast;
@@ -289,10 +292,13 @@ class PresetPhong {
 	Attribute m_pos;
 	Attribute r_normal;
 	Texture target_texture;
-	//Texture white;
-	TextureGrad predict_texture;
+	Buffer target_point;
+	Buffer target_intensity;
+	Buffer target_params;
+	BufferGrad predict_point;
+	BufferGrad predict_intensity;
+	BufferGrad predict_params;
 
-	NormalcalcParams norm;
 	ProjectParams proj;
 	RasterizeParams rast;
 	InterpolateParams intr;
@@ -300,22 +306,19 @@ class PresetPhong {
 	ProjectParams normal_proj;
 	TexturemapParams target_tex;
 	MaterialParams target_mtr;
-	TexturemapGradParams predict_tex;
 	MaterialGradParams predict_mtr;
-	//TexturemapParams white_tex;
-	//MaterialParams white_mtr;
 
 	LossParams loss;
-	AdamParams mtr_adam;
-	AdamParams tex_adam;
+	AdamParams point_adam;
+	AdamParams intensity_adam;
+	AdamParams params_adam;
 
 	GLbuffer predict_buffer;
 	GLbuffer target_buffer;
-	GLbuffer white_buffer;
-	GLbuffer tex_buffer;
 
 	float loss_sum;
 	int step;
+	double t;
 	ofstream file;
 
 public:

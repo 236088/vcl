@@ -49,6 +49,23 @@ void Buffer::addRandom(Buffer& buf, float min, float max) {
     CUDA_ERROR_CHECK(cudaLaunchKernel(BufferRandomKernel, grid, block, args, 0, NULL));
 }
 
+__global__ void BufferClampKernel(float* buffer, float min, float max, int width, int height) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * py;
+    buffer[pidx] = clamp(buffer[pidx],min, max);
+}
+
+void Buffer::clamp(Buffer& buf, float min, float max) {
+    unsigned int seed = rand();
+    dim3 block = getBlock(buf.num, buf.dimention);
+    dim3 grid = getGrid(block, buf.num, buf.dimention);
+    void* args[] = { &buf.buffer,&min,&max,&buf.num,&buf.dimention };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferClampKernel, grid, block, args, 0, NULL));
+}
+
+
 void BufferGrad::init(BufferGrad& buf, int num, int dimention) {
     Buffer::init(buf, num, dimention);
     CUDA_ERROR_CHECK(cudaMalloc(&buf.grad, buf.Size()));
