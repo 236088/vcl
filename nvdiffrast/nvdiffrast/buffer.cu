@@ -57,6 +57,14 @@ __global__ void BufferClampKernel(float* buffer, float min, float max, int width
     buffer[pidx] = clamp(buffer[pidx],min, max);
 }
 
+__global__ void BufferStepKernel(float* buffer, float threshold, int width, int height) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * py;
+    buffer[pidx] = buffer[pidx] < threshold ? 0.f : 1.f;
+}
+
 void Buffer::clamp(Buffer& buf, float min, float max) {
     unsigned int seed = rand();
     dim3 block = getBlock(buf.num, buf.dimention);
@@ -222,6 +230,13 @@ void Attribute::addRandom(Attribute& attr, float min, float max) {
     CUDA_ERROR_CHECK(cudaLaunchKernel(BufferRandomKernel, grid, block, args, 0, NULL));
 }
 
+void Attribute::step(Attribute& attr, float threshold) {
+    dim3 block = getBlock(attr.vboNum, attr.dimention);
+    dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
+    void* args[] = { &attr.vbo, &threshold,&attr.vboNum,&attr.dimention };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferStepKernel, grid, block, args, 0, NULL));
+}
+
 void AttributeGrad::init(AttributeGrad& attr, int vboNum, int vaoNum, int dimention) {
     Attribute::init(attr, vboNum, vaoNum, dimention);
     CUDA_ERROR_CHECK(cudaMalloc(&attr.grad, attr.vboSize()));
@@ -252,6 +267,61 @@ void Texture::init(Texture& texture, int width, int height, int channel, int mip
     }
 };
 
+void Texture::init(Texture& texture, float* original, int width, int height, int channel, int miplevel){
+    int maxlevel = LSB(width | height) + 1;
+    if (maxlevel > TEX_MAX_MIP_LEVEL)maxlevel = TEX_MAX_MIP_LEVEL;
+    texture.width = width;
+    texture.height = height;
+    texture.channel = channel;
+    texture.miplevel = miplevel < 1 ? 1 : (maxlevel < miplevel ? maxlevel : miplevel);
+    texture.texture[0] = original;
+    int w = width, h = height;
+    for (int i = 1; i < texture.miplevel; i++) {
+        CUDA_ERROR_CHECK(cudaMalloc(&texture.texture[i], (size_t)w * h * channel * sizeof(float)));
+        w >>= 1; h >>= 1;
+    }
+    buildMIP(texture);
+};
+
+
+__global__ void bilinearDownsamplingkernel(const Texture texture, int index, int width, int height) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * (py + height * pz);
+    px <<= 1; py <<= 1;
+    width <<= 1; height <<= 1;
+    int xs = px > 0 ? -1 : 0;
+    int xe = px < width - 2 ? 2 : 1;
+    int ys = py > 0 ? -1 : 0;
+    int ye = py < height - 2 ? 2 : 1;
+
+    int idx = index - 1;
+    float filter[4] = { .125f,.375f,.375f,.125f };
+    for (int i = 0; i < 3; i++)texture.texture[index][pidx * texture.channel + i] = 0.f;
+    for (int x = xs; x <= xe; x++) {
+        for (int y = ys; y <= ye; y++) {
+            float f = filter[x + 1] * filter[y + 1];
+            int p = (px + x) + width * (py + y);
+            for (int i = 0; i < 3; i++) {
+                texture.texture[index][pidx * texture.channel + i] += texture.texture[idx][p * texture.channel + i] * f;
+            }
+        }
+    }
+}
+
+void Texture::bilinearDownsampling(Texture& texture) {
+    int i = 1;
+    int w = texture.width, h = texture.height;
+    void* args[] = { &texture, &i, &w, &h };
+    for (; i < texture.miplevel; i++) {
+        w >>= 1; h >>= 1;
+        dim3 block = getBlock(w, h);
+        dim3 grid = getGrid(block, w, h);
+        CUDA_ERROR_CHECK(cudaLaunchKernel(bilinearDownsamplingkernel, grid, block, args, 0, NULL));
+    }
+}
 
 __global__ void downSampling(const Texture texture, int index, int width, int height) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;

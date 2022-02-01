@@ -109,16 +109,19 @@ __global__ void PhongMaterialForwardKernel(const MaterialKernelParams mtr) {
         mtr.out[pidx * mtr.channel + k] += mtr.diffusemap[pidx * mtr.channel + k] * Ka;
     }
     for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = normalize(mtr.point[i] - pos);
+        float3 l = ((float3*)mtr.point)[i] - pos;
+        float il2 = 1.f / dot(l, l);
+        l *= sqrt(il2);
         float ln = dot(l, n);
         float3 r = 2.f * ln * n - l;
         float rv = dot(r, v);
         float powrv = pow(max(rv, 0.f), shininess);
+        ln = max(ln, 0.f);
         for (int k = 0; k < mtr.channel; k++) {
-            float intensity = mtr.intensity[i * mtr.channel + k];
-            float diffuse = intensity * max(ln, 0.f);
+            float intensity = mtr.intensity[i * mtr.channel + k] * il2;
+            float diffuse = intensity * ln;
             float specular = intensity * powrv;
-            mtr.out[pidx * mtr.channel + k] += mtr.diffusemap[pidx * mtr.channel + k] * (Kd * diffuse + Ks * specular);
+            mtr.out[pidx * mtr.channel + k] += mtr.diffusemap[pidx * mtr.channel + k] * Kd * diffuse + Ks * specular;
         }
     }
 }
@@ -164,40 +167,34 @@ __global__ void PhongMaterialBackwardKernel(const MaterialKernelParams mtr, cons
     float Ks = mtr.params[2];
 
     for (int k = 0; k < mtr.channel; k++) {
-        float din = grad.out[pidx * mtr.channel + k] * mtr.diffusemap[pidx * mtr.channel + k];
+        float dLdout = grad.out[pidx * mtr.channel + k];
+        float din = mtr.diffusemap[pidx * mtr.channel + k] * dLdout;
         if(grad.params!=nullptr)atomicAdd(&grad.params[0], din);
+        if (grad.diffusemap != nullptr)grad.diffusemap[pidx * mtr.channel + k] += Ka * dLdout;
     }
     for (int i = 0; i < mtr.lightNum; i++) {
         float3 l = ((float3*)mtr.point)[i] - pos;
-        float il = 1.f / sqrt(dot(l, l));
-        l *= il;
+        float il2 = 1.f / dot(l, l);
+        l *= sqrt(il2);
         float ln = dot(l, n);
         float3 r = 2.f * ln * n - l;
         float rv = dot(r, v);
-
+        float dkd = 0.f;
+        float dks = 0.f;
         float powrv = pow(max(rv, 0.f), mtr.params[3]);
-        float dl = 0.f;
         for (int k = 0; k < mtr.channel; k++) {
             float dLdout = grad.out[pidx * mtr.channel + k];
-            float din = dLdout * mtr.diffusemap[pidx * mtr.channel + k];
-            dl += din;
-            float intensity = mtr.intensity[i * mtr.channel + k];
-            float diffuse = intensity * max(ln, 0.f);
-            float specular = intensity * powrv;
-            float dshine = din * Ks * specular * log(max(rv, 1e-3));
-            dLdout *= (Kd * diffuse + Ks * specular);
-            if (grad.diffusemap != nullptr)grad.diffusemap[pidx * mtr.channel + k] += dLdout;
-            if (grad.intensity != nullptr)atomicAdd(&grad.intensity[i * mtr.channel + k], dLdout);
-            if (grad.params != nullptr) {
-                atomicAdd(&grad.params[1], din * diffuse);
-                atomicAdd(&grad.params[2], din * specular);
-                atomicAdd(&grad.params[3], dshine);
-            }
+            float din = dLdout * mtr.intensity[i * mtr.channel + k] * il2;
+            float dln = ln * din;
+            if (grad.diffusemap != nullptr)grad.diffusemap[pidx * mtr.channel + k] += Kd * dln;
+            dkd += dln * mtr.diffusemap[pidx * mtr.channel + k];
+            dks += din;
         }
-        if (grad.point != nullptr) {
-            float3 dLdl = Kd * n;
-            if (rv > 0.f)dLdl += Ks * powrv / rv * (2 * dot(n, v) * n - v);
-            atomicAdd3(&((float3*)grad.point)[i], dLdl * (make_float3(1.f, 1.f, 1.f) - l * l) * il);
+        if (grad.params != nullptr) {
+            atomicAdd(&grad.params[1], dkd);
+            dks *= powrv;
+            atomicAdd(&grad.params[2], dks);
+            atomicAdd(&grad.params[3], Ks * dks * log(max(rv, 1e-3)));
         }
     }
 }

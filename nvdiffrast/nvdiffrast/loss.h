@@ -33,4 +33,5 @@ public:
 class MSELoss : Loss{
 public:
 	static void backward(LossParams& loss);
+	static void textureloss(LossParams& loss);
 };

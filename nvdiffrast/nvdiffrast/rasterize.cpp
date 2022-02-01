@@ -286,3 +286,227 @@ void Rasterize::forward(RasterizeGradParams& rast) {
 	if (rast.kernel.enableDB)CUDA_ERROR_CHECK(cudaMemset(rast.grad.outDB, 0, rast.Size()));
 	forward((RasterizeParams&)rast);
 }
+
+
+
+void Rasterize::wireframeinit(RasterizeParams& rast, ProjectParams& proj, int width, int height)
+{
+	if (proj.kernel.dimention != 4) ERROR_STRING(dimention is not 4);
+	rast.kernel.width = width;
+	rast.kernel.height = height;
+	rast.kernel.depth = 1;
+	rast.kernel.proj = proj.kernel.out;
+	rast.kernel.idx = proj.vao;
+	rast.projNum = proj.kernel.vboNum;
+	rast.idxNum = proj.vaoNum;
+	CUDA_ERROR_CHECK(cudaMallocHost(&rast.gl_proj, proj.vboSize()));
+	CUDA_ERROR_CHECK(cudaMallocHost(&rast.gl_idx, proj.vaoSize()));
+	CUDA_ERROR_CHECK(cudaMemcpy(rast.gl_proj, rast.kernel.proj, proj.vboSize(), cudaMemcpyDeviceToHost));
+	CUDA_ERROR_CHECK(cudaMemcpy(rast.gl_idx, rast.kernel.idx, proj.vaoSize(), cudaMemcpyDeviceToHost));
+	CUDA_ERROR_CHECK(cudaMallocHost(&rast.gl_out, rast.Size()));
+	CUDA_ERROR_CHECK(cudaMalloc(&rast.kernel.out, rast.Size()));
+
+	GLuint vertexShader;
+	GLuint geometryShader;
+	GLuint fragmentShader;
+
+	compileShader(&vertexShader, GL_VERTEX_SHADER,
+		"#version 430\n"
+		STRING(
+		layout(location = 0) in vec4 in_pos;
+		void main() {
+			gl_Position = in_pos;
+		})
+	);
+
+	compileShader(&geometryShader, GL_GEOMETRY_SHADER,
+		"#version 430\n"
+		STRING(
+		layout(triangles) in;
+		layout(triangle_strip, max_vertices = 3) out;
+		out vec3 var_uv;
+		void main() {
+			gl_PrimitiveID = gl_PrimitiveIDIn;
+			gl_Position = gl_in[0].gl_Position; var_uv = vec3(1.f, 0.f, 0.f); EmitVertex();
+			gl_Position = gl_in[1].gl_Position; var_uv = vec3(0.f, 1.f, 0.f); EmitVertex();
+			gl_Position = gl_in[2].gl_Position; var_uv = vec3(0.f, 0.f, 1.f); EmitVertex();
+		})
+	);
+	compileShader(&fragmentShader, GL_FRAGMENT_SHADER,
+		"#version 430\n"
+		STRING(
+		in vec3 var_uv;
+		layout(location = 0) out vec4 out_raster;
+		void main() {
+			vec3 d = fwidth(var_uv);
+			vec3 f = step(d, var_uv);
+			float e = 1.f - min(min(f.x, f.y), f.z);
+			out_raster = vec4(e, e, e, 1.f);
+		})
+	);
+	linkProgram(&rast.program, vertexShader, geometryShader, fragmentShader);
+
+	glGenFramebuffers(1, &rast.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, rast.fbo);
+
+	GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+	glDrawBuffers(1, DrawBuffers);
+
+	glGenTextures(1, &rast.buffer);
+	glBindTexture(GL_TEXTURE_2D, rast.buffer);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rast.gl_out);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, rast.buffer, 0);
+
+	GLuint depthbuffer;
+	glGenRenderbuffers(1, &depthbuffer);
+	glBindRenderbuffer(GL_RENDERBUFFER, depthbuffer);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthbuffer);
+
+	GLuint vao;
+	glGenVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+
+	GLuint vbo;
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
+
+	GLuint tri;
+	glGenBuffers(1, &tri);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, tri);
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glClearDepth(1.0);
+}
+void Rasterize::idhashinit(RasterizeParams& rast, ProjectParams& proj, int width, int height)
+{
+	if (proj.kernel.dimention != 4) ERROR_STRING(dimention is not 4);
+	rast.kernel.width = width;
+	rast.kernel.height = height;
+	rast.kernel.depth = 1;
+	rast.kernel.proj = proj.kernel.out;
+	rast.kernel.idx = proj.vao;
+	rast.projNum = proj.kernel.vboNum;
+	rast.idxNum = proj.vaoNum;
+	CUDA_ERROR_CHECK(cudaMallocHost(&rast.gl_proj, proj.vboSize()));
+	CUDA_ERROR_CHECK(cudaMallocHost(&rast.gl_idx, proj.vaoSize()));
+	CUDA_ERROR_CHECK(cudaMemcpy(rast.gl_proj, rast.kernel.proj, proj.vboSize(), cudaMemcpyDeviceToHost));
+	CUDA_ERROR_CHECK(cudaMemcpy(rast.gl_idx, rast.kernel.idx, proj.vaoSize(), cudaMemcpyDeviceToHost));
+	CUDA_ERROR_CHECK(cudaMallocHost(&rast.gl_out, rast.Size()));
+	CUDA_ERROR_CHECK(cudaMalloc(&rast.kernel.out, rast.Size()));
+
+	GLuint vertexShader;
+	GLuint geometryShader;
+	GLuint fragmentShader;
+
+	compileShader(&vertexShader, GL_VERTEX_SHADER,
+		"#version 430\n"
+		STRING(
+			layout(location = 0) in vec4 in_pos;
+	void main() {
+		gl_Position = in_pos;
+	})
+	);
+
+	compileShader(&geometryShader, GL_GEOMETRY_SHADER,
+		"#version 430\n"
+		STRING(
+			layout(triangles) in;
+	layout(triangle_strip, max_vertices = 3) out;
+	void main() {
+		gl_PrimitiveID = gl_PrimitiveIDIn;
+		gl_Position = gl_in[0].gl_Position; EmitVertex();
+		gl_Position = gl_in[1].gl_Position; EmitVertex();
+		gl_Position = gl_in[2].gl_Position; EmitVertex();
+	})
+	);
+	compileShader(&fragmentShader, GL_FRAGMENT_SHADER,
+		"#version 430\n"
+		STRING(
+			layout(location = 0) out vec4 out_raster;
+	void main() {
+		uint a = gl_PrimitiveID;
+		uint b = 0xbeefcade;
+		uint c = 0xdeadcafe;
+		a -= b; a -= c; a ^= (c >> 13);
+		b -= c; b -= a; b ^= (a << 8);
+		c -= a; c -= b; c ^= (b >> 13);
+		a -= b; a -= c; a ^= (c >> 12);
+		b -= c; b -= a; b ^= (a << 16);
+		c -= a; c -= b; c ^= (b >> 5);
+		a -= b; a -= c; a ^= (c >> 3);
+		b -= c; b -= a; b ^= (a << 10);
+		c -= a; c -= b; c ^= (b >> 15);
+		uint d = 0x007fffff;
+		vec3 color = vec3(float(a & d), float(b & d), float(c & d)) / float(d);
+		out_raster = vec4(color, 1.f);
+	})
+	);
+	linkProgram(&rast.program, vertexShader, geometryShader, fragmentShader);
+
+	glGenFramebuffers(1, &rast.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, rast.fbo);
+
+	GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+	glDrawBuffers(1, DrawBuffers);
+
+	glGenTextures(1, &rast.buffer);
+	glBindTexture(GL_TEXTURE_2D, rast.buffer);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rast.gl_out);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, rast.buffer, 0);
+
+	GLuint depthbuffer;
+	glGenRenderbuffers(1, &depthbuffer);
+	glBindRenderbuffer(GL_RENDERBUFFER, depthbuffer);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthbuffer);
+
+	GLuint vao;
+	glGenVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+
+	GLuint vbo;
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
+
+	GLuint tri;
+	glGenBuffers(1, &tri);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, tri);
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glClearDepth(1.0);
+}
+
+void Rasterize::drawforward(RasterizeParams& rast) {
+	CUDA_ERROR_CHECK(cudaMemcpy(rast.gl_proj, rast.kernel.proj, (size_t)rast.projNum * 4 * sizeof(float), cudaMemcpyDeviceToHost));
+	glBindFramebuffer(GL_FRAMEBUFFER, rast.fbo);
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glUseProgram(rast.program);
+	glViewport(0, 0, rast.kernel.width, rast.kernel.height);
+	glBufferData(GL_ARRAY_BUFFER, (size_t)rast.projNum * 4 * sizeof(float), rast.gl_proj, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, (size_t)rast.idxNum * 3 * sizeof(float), rast.gl_idx, GL_DYNAMIC_DRAW);
+	glDrawElements(GL_TRIANGLES, rast.idxNum * 3, GL_UNSIGNED_INT, 0);
+
+	glBindTexture(GL_TEXTURE_2D, rast.buffer);
+	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, rast.gl_out);
+	CUDA_ERROR_CHECK(cudaMemcpy(rast.kernel.out, rast.gl_out, rast.Size(), cudaMemcpyHostToDevice));
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glFlush();
+}

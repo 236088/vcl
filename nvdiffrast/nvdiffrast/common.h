@@ -16,6 +16,7 @@
 #include <glm/gtx/transform.hpp>
 #include <vector>
 #include <stdio.h>
+#include <string>
 #include <iostream>
 #include <fstream>
 using namespace std;
@@ -139,5 +140,5 @@ static __device__ __forceinline__ float getUniform(unsigned int a, unsigned  int
 	b -= c; b -= a; b ^= (a << 10);
 	c -= a; c -= b; c ^= (b >> 15);
 	int d = 0x007fffff;
-	return (float)(c & d) / (float)d;
+	return float(c & d) / float(d);
 }

@@ -53,4 +53,7 @@ public:
 	static void forward(RasterizeParams& rast);
 	static void forward(RasterizeGradParams& rast);
 	static void backward(RasterizeGradParams& rast);
+	static void wireframeinit(RasterizeParams& rast, ProjectParams& proj, int width, int height);
+	static void idhashinit(RasterizeParams& rast, ProjectParams& proj, int width, int height);
+	static void drawforward(RasterizeParams& rast);
 };

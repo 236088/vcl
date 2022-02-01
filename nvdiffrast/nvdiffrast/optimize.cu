@@ -59,6 +59,28 @@ void Optimizer::clampParams(OptimizeParams& opt, float min, float max) {
 	CUDA_ERROR_CHECK(cudaLaunchKernel(optimizeClamp, opt.grid, opt.block, args, 0, NULL));
 }
 
+
+
+void SGD::setHyperParams(SGDParams& sgd, double eta) {
+	sgd.hyper.eta = eta;
+}
+
+__global__ void sgdStep(const OptimizeKernelParams opt, const SGDHyperParams sgd) {
+	int px = blockIdx.x * blockDim.x + threadIdx.x;
+	int py = blockIdx.y * blockDim.y + threadIdx.y;
+	int pz = blockIdx.z;
+	int pidx = px + opt.width * (py + opt.height * pz);
+	if (pidx >= opt.size)return;
+
+	AddNaNcheck(opt.param[pidx], -sgd.eta * opt.grad[pidx]);
+}
+
+void SGD::step(SGDParams& sgd) {
+	sgd.it++;
+	void* args[] = {&sgd.kernel, &sgd.hyper };
+	CUDA_ERROR_CHECK(cudaLaunchKernel(sgdStep, sgd.grid, sgd.block, args, 0, NULL));
+}
+
 void Adam::setHyperParams(AdamParams& adam, double eta, double rhom, double rhov, double eps) {
 	adam.hyper.rhom = rhom;
 	adam.hyper.rhov = rhov;

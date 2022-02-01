@@ -38,6 +38,7 @@ struct Attribute {
 	static void copy(Attribute& dst, Attribute& src);
 	static void liner(Attribute& attr, float w, float b);
 	static void addRandom(Attribute& attr, float min, float max);
+	static void step(Attribute& attr, float threshold);
 };
 
 struct AttributeGrad :Attribute {
@@ -55,7 +56,9 @@ struct Texture {
 	float* texture[TEX_MAX_MIP_LEVEL];
 	size_t Size() { return (size_t)width * height * channel * sizeof(float); };
 	static void init(Texture& texture, int width, int height, int channel, int miplevel);
-	static void buildMIP(Texture& texture);
+	static void init(Texture& texture, float* original, int width, int height, int channel, int miplevel);
+	static void buildMIP(Texture& texture);	
+	static void bilinearDownsampling(Texture& texture);
 	static void loadBMP(const char* path, Texture& texture, int miplevel);
 	static void setColor(Texture& texture, float* color);
 	static void liner(Texture& texture, float w, float b);

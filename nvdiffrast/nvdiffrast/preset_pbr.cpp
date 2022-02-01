@@ -134,6 +134,6 @@ void PresetPBR::display(void) {
 	glFlush();
 }
 
-void PresetPBR::update(double dt) {
+void PresetPBR::update(double dt, double t, bool& play) {
 	Matrix::setRandomRotation(mat);
 }

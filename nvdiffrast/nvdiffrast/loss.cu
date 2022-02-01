@@ -55,3 +55,37 @@ void MSELoss::backward(LossParams& loss) {
 	CUDA_ERROR_CHECK(cudaMemcpy(&loss.loss, loss.kernel.buffer, sizeof(float), cudaMemcpyDeviceToHost));
 	loss.loss /= 2.f;
 }
+
+__global__ void texturelosskernel(const LossKernelParams loss) {
+	int px = blockIdx.x * blockDim.x + threadIdx.x;
+	int py = blockIdx.y * blockDim.y + threadIdx.y;
+	int pz = blockIdx.z;
+	int pidx = (px + loss.width * py) * loss.depth + pz;
+	if (pidx >= loss.size)return;
+	int w = loss.width / 4;
+	int w2 = loss.width / 2;
+	if ((px < w || w2 <= px) && (py < w || w2 <= py)) {
+		loss.buffer[pidx] = 0.f;
+		return;
+	}
+	float t = loss.predict[pidx] - loss.target[pidx];
+	loss.buffer[pidx] = t * t;
+}
+
+void MSELoss::textureloss(LossParams& loss) {
+	void* args[] = { &loss.kernel };
+	CUDA_ERROR_CHECK(cudaLaunchKernel(texturelosskernel, loss.grid, loss.block, args, 0, NULL));
+	int stride = loss.stride, w = loss.lh, h = loss.rh;
+	void* rargs[] = { &loss.kernel, &w, &h, &stride };
+	while (stride > 0)
+	{
+		dim3 block = getBlock(w, h);
+		dim3 grid = getGrid(block, w, h);
+		CUDA_ERROR_CHECK(cudaLaunchKernel(reduction, grid, block, rargs, 0, NULL));
+		stride >>= 1;
+		if (h >= w)h >>= 1;
+		else w >>= 1;
+	}
+	CUDA_ERROR_CHECK(cudaMemcpy(&loss.loss, loss.kernel.buffer, sizeof(float), cudaMemcpyDeviceToHost));
+	loss.loss /= (loss.kernel.size / 2);
+}

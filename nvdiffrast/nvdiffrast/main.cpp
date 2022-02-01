@@ -1,7 +1,6 @@
 #include "preset.h"
 #include <ctime>
-struct timespec pre, cur;
-double t;
+struct timespec pre, cur, start;
 float loss_sum = 0;
 bool play = false;
 
@@ -9,14 +8,14 @@ bool play = false;
 //PresetCube preset;
 //PresetEarth preset;
 //PresetFilter preset;
-PresetPhong preset;
-//PresetPrimitives preset;
+//PresetPhong preset;
+PresetPrimitives preset;
 
 
 static void InitFunc()
 {
-	timespec_get(&cur, TIME_UTC);
-	srand(cur.tv_nsec);
+	timespec_get(&start, TIME_UTC);
+	//srand(cur.tv_nsec);
 	preset.init();
 }
 
@@ -32,9 +31,9 @@ static void IdleFunc(void)
 	timespec_get(&cur, TIME_UTC);
 	long diff = cur.tv_nsec - pre.tv_nsec;
 	if (diff < 0)diff = 1e9 + cur.tv_nsec - pre.tv_nsec;
-	double dt = (double)diff * 1e-9;
-	t += dt;
-	preset.update(dt);
+	double dt = double(diff) * 1e-9;
+	double t = double(cur.tv_sec - start.tv_sec) + double(cur.tv_nsec - start.tv_nsec) * 1e-9;
+	preset.update(dt,t, play);
 
 	glutPostRedisplay();
 }

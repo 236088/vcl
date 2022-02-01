@@ -55,6 +55,8 @@ class PresetPrimitives {
 	Attribute pos;
 	Attribute texel;
 	Attribute normal;
+	Attribute color;
+	Texture mip_texture;
 	Texture texture;
 	Buffer point;
 	Buffer intensity;
@@ -63,31 +65,38 @@ class PresetPrimitives {
 	ProjectParams proj;
 	RasterizeParams rast;
 	InterpolateParams intr;
+	InterpolateParams color_intr;
 	ProjectParams pos_proj;
 	ProjectParams normal_proj;
+	TexturemapParams mip_tex;
 	TexturemapParams tex;
 	MaterialParams mtr;
 	AntialiasParams aa;
 	FilterParams flt;
+	RasterizeParams wireframe;
+	RasterizeParams idhash;
 
 	GLbuffer rast_buffer;
 	GLbuffer intr_buffer;
+	GLbuffer color_buffer;
 	GLbuffer tex_buffer;
+	GLbuffer mip_tex_buffer;
 	GLbuffer mtr_buffer;
 	GLbuffer aa_buffer;
 	GLbuffer flt_buffer;
+	GLbuffer wireframe_buffer;
+	GLbuffer idhash_buffer;
 
 public:
-	const int windowWidth = 1024;
-	const int windowHeight = 512;
+	const int windowWidth = 2048;
+	const int windowHeight = 1024;
 	void init();
 	void display();
-	void update(double dt);
+	void update(double dt, double t, bool& play);
 };
 
 class PresetCube {
 	Matrix mat;
-	Matrix hr_mat;
 
 	Attribute target_pos;
 	Attribute target_color;
@@ -115,8 +124,6 @@ class PresetCube {
 
 	ProjectParams hr_predict_proj;
 	RasterizeParams hr_predict_rast;
-	InterpolateParams hr_predict_intr;
-	AntialiasParams hr_predict_aa;
 	GLbuffer gl_hr_predict;
 
 	LossParams predict_loss;
@@ -133,8 +140,6 @@ class PresetCube {
 
 	ProjectParams hr_noaa_proj;
 	RasterizeParams hr_noaa_rast;
-	InterpolateParams hr_noaa_intr;
-	AntialiasParams hr_noaa_aa;
 	GLbuffer gl_hr_noaa;
 
 	LossParams noaa_loss;
@@ -145,12 +150,15 @@ class PresetCube {
 	float noaa_loss_sum;
 	int step;
 	ofstream file;
+	int pause[9]{ 10,20, 50, 100,200,500,1000,2000,5000 };
+	int it = 0;
+
 public:
 	const int windowWidth = 1536;
 	const int windowHeight = 1024;
 	void init();
 	void display();
-	void update(double dt);
+	void update(double dt, double t, bool& play);
 };
 
 class PresetEarth {
@@ -158,48 +166,53 @@ class PresetEarth {
 	Attribute pos;
 	Attribute texel;
 	ProjectParams proj;
-	RasterizeParams rast;
-	InterpolateParams intr;
-	struct Pass {
-		Texture target_texture;
-		TextureGrad predict_texture;
-
-		TexturemapParams target_tex;
-		TexturemapGradParams predict_tex;
-
-		LossParams loss;
-		AdamParams adam;
-		void init(RasterizeParams& rast,InterpolateParams& intr ,int miplevel);
-		void forward();
-	};
-
-	Pass mip;
-	Pass nomip;
-
-	GLbuffer gl_tex_predict;
-	GLbuffer gl_predict;
-	GLbuffer gl_tex_mip_predict;
-	GLbuffer gl_mip_predict;
+	RasterizeParams target_rast;
+	InterpolateParams target_intr;
+	Texture target_texture;
+	TexturemapParams target_tex;
+	Texture out_tex;
 	GLbuffer gl_tex_target;
 	GLbuffer gl_target;
+
+	RasterizeParams rast;
+	InterpolateParams intr;
+
+	TextureGrad predict_texture;
+	TexturemapGradParams predict_tex;
+	LossParams loss;
+	AdamParams adam;
+	LossParams tex_loss;
+	GLbuffer gl_tex_predict;
+	GLbuffer gl_predict;
+
+	TextureGrad predict_mip_texture;
+	TexturemapGradParams predict_mip_tex;
+	LossParams mip_loss;
+	AdamParams mip_adam;
+	LossParams mip_tex_loss;
+	GLbuffer gl_tex_mip_predict;
+	GLbuffer gl_mip_predict;
+
 
 	float mip_loss_sum;
 	float nomip_loss_sum;
 	int step;
 	ofstream file;
+	int pause[6]{ 500, 1000, 2000, 5000,10000 ,20000 };
+	int it = 0;
+
 public:
 	const int windowWidth = 1536;
 	const int windowHeight = 1024;
 	void init();
 	void display();
-	void update(double dt);
+	void update(double dt, double t, bool& play);
 };
 
 //original preset
 
 class PresetFilter {
 	Matrix mat;
-	Matrix hr_mat;
 
 	Attribute target_pos;
 	Attribute target_color;
@@ -208,8 +221,8 @@ class PresetFilter {
 	RasterizeParams target_rast;
 	InterpolateParams target_intr;
 	AntialiasParams target_aa;
-	FilterParams target_flt1;
-	FilterParams target_flt2;
+	FilterParams target_flt;
+	GLbuffer gl_flt_target;
 
 	ProjectParams hr_target_proj;
 	RasterizeParams hr_target_rast;
@@ -244,7 +257,6 @@ class PresetFilter {
 		RasterizeGradParams rast;
 		InterpolateGradParams intr;
 		AntialiasGradParams aa;
-		GLbuffer gl_aa;
 		FilterGradParams flt;
 		GLbuffer gl;
 
@@ -253,6 +265,8 @@ class PresetFilter {
 		InterpolateParams hr_intr;
 		AntialiasParams hr_aa;
 		GLbuffer gl_hr;
+		RasterizeGradParams wireframe;
+		GLbuffer gl_wireframe;
 
 		LossParams loss;
 		AdamParams adam_pos;
@@ -266,20 +280,21 @@ class PresetFilter {
 	};
 
 	Pass predict1;
-	Pass predict2;
 	float loss_sum;
 	float loss_sum1;
-	float loss_sum2;
 
 	int step;
 	ofstream file;
+	int pause[9]{ 10,20, 50, 100,200,500,1000,2000,5000 };
+	int it = 0;
+
 
 public:
 	const int windowWidth = 2048;
 	const int windowHeight = 1024;
 	void init();
 	void display();
-	void update(double dt);
+	void update(double dt, double t, bool& play);
 };
 
 class PresetPhong {
@@ -320,13 +335,15 @@ class PresetPhong {
 	int step;
 	double t;
 	ofstream file;
+	int pause[6]{ 10,100,1000,2000,5000,10000, };
+	int it = 0;
 
 public:
 	const int windowWidth = 1024;
 	const int windowHeight = 512;
 	void init();
 	void display(void);
-	void update(double dt);
+	void update(double dt, double t, bool& play);
 };
 
 class PresetPBR {
@@ -378,6 +395,9 @@ class PresetPBR {
 	AdamParams diff_adam;
 	AdamParams rough_adam;
 	AdamParams nor_adam;
+	int pause[6]{ 100,200,500,1000,2000,5000 };
+	int it = 0;
+
 
 public:
 	const int windowWidth = 2048;
@@ -385,6 +405,6 @@ public:
 	double t;
 	void init();
 	void display(void);
-	void update(double dt);
+	void update(double dt, double t, bool& play);
 	float getLoss() { return Loss::loss(loss); };
 };

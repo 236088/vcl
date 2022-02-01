@@ -33,6 +33,20 @@ public:
 
 
 
+struct SGDHyperParams {
+	double eta;
+};
+
+struct SGDParams : OptimizeParams {
+	SGDHyperParams hyper;
+};
+
+class SGD : Optimizer {
+public:
+	static void setHyperParams(SGDParams& sgd, double eta);
+	static void step(SGDParams& sgd);
+};
+
 struct AdamHyperParams {
 	double rhom;
 	double rhov;
