@@ -125,8 +125,8 @@ void PresetPhong::update(double dt, double t, bool& play) {
 	if ((++step) % CONSOLE_INTERVAL == 0) {
 		Buffer::copy(h_params, params);
 		loss_sum /= CONSOLE_INTERVAL;
-		std::cout << step << "," << loss_sum << "," << h_params[0] << "," << h_params[1] << "," << h_params[2] << "," << h_params[3] << " time" << time << std::endl;
-		file << step << "," << loss_sum << "," << h_params[0] << "," << h_params[1] << "," << h_params[2] << "," << h_params[3] << std::endl;
+		std::cout << step << ", " << loss_sum << ", " << h_params[0] << ", " << h_params[1] << ", " << h_params[2] << ", " << h_params[3] << " time:" << time << std::endl;
+		file << step << ", " << loss_sum << ", " << h_params[0] << ", " << h_params[1] << ", " << h_params[2] << ", " << h_params[3] << std::endl;
 		loss_sum = 0.f;
 	}
 	if (step == pause[5]) {

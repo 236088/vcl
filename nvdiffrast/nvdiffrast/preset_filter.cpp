@@ -139,8 +139,8 @@ void PresetFilter::update(double dt, double t, bool& play) {
 	if ((++step) % CONSOLE_INTERVAL == 0) {
 		loss_sum /= CONSOLE_INTERVAL;
 		error_sum /= CONSOLE_INTERVAL;
-		std::cout << step << "," << loss_sum << "," << error_sum <<  "," << flt.h_sig << "time:" << time << std::endl;
-		file << step << "," << loss_sum << "," << error_sum << "," << flt.h_sig << std::endl;
+		std::cout << step << ", " << loss_sum << ", " << error_sum <<  ", " << flt.h_sig << " time:" << time << std::endl;
+		file << step << ", " << loss_sum << ", " << error_sum << ", " << flt.h_sig << std::endl;
 		loss_sum = 0.f;
 		error_sum = 0.f;
 	}

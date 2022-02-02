@@ -176,7 +176,7 @@ class PresetEarth {
 
 	int step;
 	ofstream file;
-	int pause[7]{ 100, 500, 1000, 2000, 5000,10000 ,20000 };
+	int pause[8]{ 100, 200, 500, 1000, 2000, 5000,10000 ,20000 };
 	int it = 0;
 
 public:
@@ -236,7 +236,7 @@ class PresetFilter {
 
 	int step;
 	ofstream file;
-	int pause[10]{ 10000,20, 50, 100,200,500,1000,2000,5000 ,10000 };
+	int pause[10]{ 10,20, 50, 100,200,500,1000,2000,5000 ,10000 };
 	int it = 0;
 
 public:
