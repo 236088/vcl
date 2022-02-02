@@ -4,18 +4,19 @@
 
 void PresetPhong::init() {
 	loss_sum = 0.f;
+	CUDA_ERROR_CHECK(cudaMallocHost(&h_params, 4 * sizeof(float)));
+	time = 0;
 	step = 0;
-	t = 0;
 	file.open("../../phong_log.txt");
 	//file.open("F:/vcl/picture/phong/phong_log.txt");
-	file << "step, predict" << std::endl;
+	file << "step, Ka, Kd, Ks, alpha, predict" << std::endl;
 	int width = 512;
 	int height = 512;
 	Attribute::loadOBJ("../../spot_triangulated.obj", &pos, &texel, &normal);
 	Texture::loadBMP("../../spot_texture.bmp", target_texture, 4);
 	Matrix::init(mat);
-	Matrix::setFovy(mat, 30.f);
-	Matrix::setEye(mat, -3.f, 0.f, -3.f);
+	Matrix::setFovy(mat, 45.f);
+	Matrix::setEye(mat, -2.f, 0.f, -2.f);
 	Project::init(proj, mat.mvp, pos, true);
 	Rasterize::init(rast, proj, width, height, 1, true);
 	Interpolate::init(intr, rast, texel);
@@ -36,7 +37,7 @@ void PresetPhong::init() {
 		1.f,1.f,1.f,
 	};
 	float _params[4]{
-		.1f,.7f,.5f,  5.f
+		.1f,.5f,.7f,5.f
 	};
 	Buffer::init(target_point, 1, 3);
 	Buffer::copy(target_point, _point);
@@ -62,26 +63,26 @@ void PresetPhong::init() {
 	float params_[4]{
 		.0f, .0f, .0f, 1.f
 	};
-	BufferGrad::init(predict_point, 1, 3);
-	Buffer::copy(predict_point, _point);
-	BufferGrad::init(predict_intensity, 1, 3);
-	Buffer::copy(predict_intensity, _intensity);
-	BufferGrad::init(predict_params, 4, 1);
-	Buffer::copy(predict_params, params_);
-	Material::init(predict_mtr, rast, pos_proj, normal_proj, &texel, 3, target_tex.kernel.out, nullptr);
-	Material::init(predict_mtr, *(float3*)&mat.eye, predict_point, predict_intensity);
-	Material::init(predict_mtr, predict_params);
-	Loss::init(loss, target_mtr.kernel.out, predict_mtr.kernel.out, predict_mtr.grad.out, width, height, 3);
+	BufferGrad::init(point, 1, 3);
+	Buffer::copy(point, _point);
+	BufferGrad::init(intensity, 1, 3);
+	Buffer::copy(intensity, _intensity);
+	BufferGrad::init(params, 4, 1);
+	Buffer::copy(params, params_);
+	Material::init(mtr, rast, pos_proj, normal_proj, &texel, 3, target_tex.kernel.out, nullptr);
+	Material::init(mtr, *(float3*)&mat.eye, point, intensity);
+	Material::init(mtr, params);
+	Loss::init(loss, target_mtr.kernel.out, mtr.kernel.out, mtr.grad.out, width, height, 3);
 
-	//Optimizer::init(point_adam, predict_point);
+	//Optimizer::init(point_adam, point);
 	//Adam::setHyperParams(point_adam, 1e-3, .9, .999, 1e-8);
-	//Optimizer::init(intensity_adam, predict_intensity);
+	//Optimizer::init(intensity_adam, intensity);
 	//Adam::setHyperParams(intensity_adam, 1e-3, .9, .999, 1e-8);
-	Optimizer::init(params_adam, predict_params);
-	Adam::setHyperParams(params_adam, 1e-2, .9, .999, 1e-8);
+	Optimizer::init(params_adam, params);
+	Adam::setHyperParams(params_adam, 1e-2, .9, .99, 1e-8);
 
 	GLbuffer::init(target_buffer, target_mtr.kernel.out, width, height, 3);
-	GLbuffer::init(predict_buffer, predict_mtr.kernel.out, width, height, 3);
+	GLbuffer::init(buffer, mtr.kernel.out, width, height, 3);
 
 	Matrix::forward(mat);
 	Project::forward(proj);
@@ -94,16 +95,20 @@ void PresetPhong::init() {
 }
 
 void PresetPhong::display(void) {
-	BufferGrad::clear(predict_point);
-	BufferGrad::clear(predict_intensity);
-	BufferGrad::clear(predict_params);
-	PhongMaterial::forward(predict_mtr);
+	struct timespec start, end;
+	timespec_get(&start, TIME_UTC);
+	PhongMaterial::forward(mtr);
 	MSELoss::backward(loss);
-	PhongMaterial::backward(predict_mtr);
+	PhongMaterial::backward(mtr);
 	//Adam::step(point_adam);
 	//Adam::step(intensity_adam);
 	Adam::step(params_adam);
 	Optimizer::clampParams(params_adam, 1e-3, 1e+3);
+	BufferGrad::clear(point);
+	BufferGrad::clear(intensity);
+	BufferGrad::clear(params);
+	timespec_get(&end, TIME_UTC);
+	time += double(end.tv_sec - start.tv_sec) + double(end.tv_nsec - start.tv_nsec) * 1e-9;
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glUseProgram(0);
@@ -111,16 +116,17 @@ void PresetPhong::display(void) {
 	glViewport(0, 0, windowWidth, windowHeight);
 	glEnable(GL_TEXTURE_2D);
 	GLbuffer::draw(target_buffer, GL_RGB32F, GL_RGB,0.f, -1.f, 1.f, 1.f);
-	GLbuffer::draw(predict_buffer, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 1.f );
+	GLbuffer::draw(buffer, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 1.f );
 	glFlush();
 }
 
 void PresetPhong::update(double dt, double t, bool& play) {
 	loss_sum += Loss::loss(loss);
-	t += dt;
 	if ((++step) % CONSOLE_INTERVAL == 0) {
-		std::cout << step << "," << loss_sum / CONSOLE_INTERVAL << std::endl;
-		file << step << "," << loss_sum / CONSOLE_INTERVAL << std::endl;
+		Buffer::copy(h_params, params);
+		loss_sum /= CONSOLE_INTERVAL;
+		std::cout << step << "," << loss_sum << "," << h_params[0] << "," << h_params[1] << "," << h_params[2] << "," << h_params[3] << " time" << time << std::endl;
+		file << step << "," << loss_sum << "," << h_params[0] << "," << h_params[1] << "," << h_params[2] << "," << h_params[3] << std::endl;
 		loss_sum = 0.f;
 	}
 	if (step == pause[5]) {

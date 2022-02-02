@@ -1,49 +1,55 @@
 #include "preset.h"
 
 #define CONSOLE_INTERVAL 10
-
+#define MIP_MODE
+#define DISPLAY_TEXTURE
+#define DISPLAY
 
 void PresetEarth::init() {
-	mip_loss_sum = 0.f;
-	nomip_loss_sum = 0.f;
+	int mip = 4;
+	loss_sum = 0.f;
+	error_sum = 0.f;
+	time = 0;
 	step = 0;
-	//file.open("../../earth_log.txt");
-	file.open("F:/vcl/picture/earth/earth_log.txt");
-	file << "step, predict, noMIP" << std::endl;
+	file.open("../../earth_log.txt");
+	//file.open("F:/vcl/picture/earth/earth_log.txt");
+	file << "step, loss" << std::endl;
 	Attribute::loadOBJ("../../sphere.obj", &pos, &texel, nullptr);
 	Matrix::init(mat);
-	Matrix::setEye(mat, 0.f, 0.f, 4.f);
-	Matrix::setFovy(mat, 30.f);
+	Matrix::setEye(mat, 0.f, 0.f, 3.5f);
+	Matrix::setFovy(mat, 45.f);
 	Project::init(proj, mat.mvp, pos, true);
 	Rasterize::init(target_rast, proj, 4096, 4096, 1, true);
 	Interpolate::init(target_intr, target_rast, texel);
+#ifdef MIP_MODE
+	Texture::loadBMP("../../earth-texture.bmp", target_texture, mip);
+#else
 	Texture::loadBMP("../../earth-texture.bmp", target_texture, 1);
+#endif
 	Texturemap::init(target_tex, target_rast, target_intr, target_texture);
 	Texture::init(out_tex, target_tex.kernel.out, 4096, 4096, 3, 4);
 
 	Rasterize::init(rast, proj, 512, 512, 1, true);
 	Interpolate::init(intr, rast, texel);
-
-	TextureGrad::init(predict_texture, target_texture.width, target_texture.height, target_texture.channel, 1);
-	Texturemap::init(predict_tex, rast, intr, predict_texture);
-	Loss::init(loss, out_tex.texture[3], predict_tex.kernel.out, predict_tex.grad.out, 512, 512, 3);
-	Optimizer::init(adam, predict_texture);
+#ifdef MIP_MODE
+	TextureGrad::init(texture, target_texture.width, target_texture.height, target_texture.channel, mip);
+#else
+	TextureGrad::init(texture, target_texture.width, target_texture.height, target_texture.channel, 1);
+#endif
+	Texturemap::init(tex, rast, intr, texture);
+	Loss::init(loss, out_tex.texture[3], tex.kernel.out, tex.grad.out, 512, 512, 3);
+	Optimizer::init(adam, texture);
 	Adam::setHyperParams(adam, 1e-3, 0.9, 0.99, 1e-8);
-	Loss::init(tex_loss, target_texture.texture[0], predict_texture.texture[0], nullptr, target_texture.width, target_texture.height, target_texture.channel);
+	Loss::init(tex_loss, target_texture.texture[0], texture.texture[0], nullptr, target_texture.width, target_texture.height, target_texture.channel);
 
-	TextureGrad::init(predict_mip_texture, target_texture.width, target_texture.height, target_texture.channel, 3);
-	Texturemap::init(predict_mip_tex, rast, intr, predict_mip_texture);
-	Loss::init(mip_loss, out_tex.texture[3], predict_mip_tex.kernel.out, predict_mip_tex.grad.out, 512, 512, 3);
-	Optimizer::init(mip_adam, predict_mip_texture);
-	Adam::setHyperParams(mip_adam, 1e-3, 0.9, 0.99, 1e-8);
-	Loss::init(mip_tex_loss, target_texture.texture[0], predict_mip_texture.texture[0], nullptr, target_texture.width, target_texture.height, target_texture.channel);
-
-	GLbuffer::init(gl_predict, predict_tex.kernel.out, 512, 512, 3);
-	GLbuffer::init(gl_tex_predict, &predict_texture.texture[0][2048 * 512 * 3], 2048, 512, 3);
-	GLbuffer::init(gl_mip_predict, predict_mip_tex.kernel.out, 512, 512, 3);
-	GLbuffer::init(gl_tex_mip_predict, &predict_mip_texture.texture[0][2048 * 512 * 3], 2048, 512, 3);
+#ifdef  DISPLAY
+	GLbuffer::init(gl, tex.kernel.out, 512, 512, 3);
 	GLbuffer::init(gl_target, out_tex.texture[3], 512, 512, 3);
+#ifdef  DISPLAY_TEXTURE
+	GLbuffer::init(gl_tex, &texture.texture[0][2048 * 512 * 3], 2048, 512, 3);
 	GLbuffer::init(gl_tex_target, &target_texture.texture[0][2048 * 512 * 3], 2048, 512, 3);
+#endif
+#endif
 }
 
 void PresetEarth::display() {
@@ -54,49 +60,53 @@ void PresetEarth::display() {
 	Texturemap::forward(target_tex);
 	Texture::bilinearDownsampling(out_tex);
 
+	struct timespec start, end;
+	timespec_get(&start, TIME_UTC);
+	Matrix::forward(mat);
+	Project::forward(proj);
 	Rasterize::forward(rast);
 	Interpolate::forward(intr);
-
-	Texturemap::forward(predict_tex);
+	Texturemap::forward(tex);
 	MSELoss::backward(loss);
-	Texturemap::backward(predict_tex);
+	Texturemap::backward(tex);
+#ifdef MIP_MODE
+	TextureGrad::gradSumup(texture);
 	Adam::step(adam);
+	Texture::buildMIP(texture);
+#else
+	Adam::step(adam);
+#endif
 	MSELoss::textureloss(tex_loss);
-	TextureGrad::clear(predict_texture);
+	TextureGrad::clear(texture);
+	timespec_get(&end, TIME_UTC);
+	time += double(end.tv_sec - start.tv_sec) + double(end.tv_nsec - start.tv_nsec) * 1e-9;
 
-	Texturemap::forward(predict_mip_tex);
-	MSELoss::backward(mip_loss);
-	Texturemap::backward(predict_mip_tex);
-	TextureGrad::gradSumup(predict_mip_texture);
-	Adam::step(mip_adam);
-	Texture::buildMIP(predict_mip_texture);
-	MSELoss::textureloss(mip_tex_loss);
-	TextureGrad::clear(predict_mip_texture);
-
+#ifdef DISPLAY
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glUseProgram(0);
 
 	glViewport(0, 0, windowWidth, windowHeight);
 	glEnable(GL_TEXTURE_2D);
-	GLbuffer::draw(gl_predict, GL_RGB32F, GL_RGB, -1.f, 0.f, -.33333333f, 1.f);
-	GLbuffer::draw(gl_tex_predict, GL_RGB32F, GL_RGB, .125f, .5f, .1875f, .75f, -1.f, -1.f, -.33333333f, 0.f);
-	GLbuffer::draw(gl_mip_predict, GL_RGB32F, GL_RGB,  -.33333333f, 0.f, .33333333f, 1.f);
-	GLbuffer::draw(gl_tex_mip_predict, GL_RGB32F, GL_RGB, .125f, .5f, .1875f, .75f, -.33333333f, -1.f, .33333333f, 0.f);
-	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, .33333333f, 0.f, 1.f, 1.f);
-	GLbuffer::draw(gl_tex_target, GL_RGB32F, GL_RGB, .125f,  .5f, .1875f, .75f, .33333333f, -1.f, 1.f, 0.f);
+	GLbuffer::draw(gl, GL_RGB32F, GL_RGB, -1.f, 0.f, 0.f, 1.f);
+	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, 0.f, 0.f, 1.f, 1.f);
+#ifdef DISPLAY_TEXTURE
+	GLbuffer::draw(gl_tex, GL_RGB32F, GL_RGB, 0.f, 0.f, .25f, 1.f, -1.f, -1.f, 0.f, 0.f);
+	GLbuffer::draw(gl_tex_target, GL_RGB32F, GL_RGB, 0.f, 0.f, .25f, 1.f, 0.f, -1.f, 1.f, 0.f);
+#endif
 	glFlush();
+#endif
 }
 
 void PresetEarth::update(double dt, double t, bool& play) {
-	mip_loss_sum -=10.0 * log10( Loss::loss(mip_tex_loss));
-	nomip_loss_sum -= 10.0 * log10(Loss::loss(tex_loss));
+	loss_sum += Loss::loss(loss);
+	error_sum -= 10.0 * log10(Loss::loss(tex_loss));
 	if ((++step) % CONSOLE_INTERVAL == 0) {
-		mip_loss_sum /= CONSOLE_INTERVAL;
-		nomip_loss_sum /= CONSOLE_INTERVAL;
-		std::cout << step << "," << mip_loss_sum << "," << nomip_loss_sum << std::endl;
-		file << step << "," <<  mip_loss_sum << "," << nomip_loss_sum << std::endl;
-		nomip_loss_sum = 0.f;
-		mip_loss_sum = 0.f;
+		loss_sum /= CONSOLE_INTERVAL;
+		error_sum /= CONSOLE_INTERVAL;
+		std::cout << step << "," << loss_sum << "," << error_sum << " time"<< time <<std::endl;
+		file << step << "," << loss_sum << "," << error_sum << std::endl;
+		loss_sum = 0.f;
+		error_sum = 0.f;
 	}	
 	if (step == pause[it]) {
 		play = false;
@@ -106,6 +116,6 @@ void PresetEarth::update(double dt, double t, bool& play) {
 	float x = (float)rand() / (float)RAND_MAX * 2.f - 1.f;
 	float y = (float)rand() / (float)RAND_MAX * 2.f - 1.f;
 	float z = (float)rand() / (float)RAND_MAX * 48.5f + 1.5f;
+	Matrix::setTranslation(mat, x, y, 0.f);
 	Matrix::setEye(mat, 0.f, 0.f, z);
-	Matrix::setOrigin(mat, x, y, 0.f);
 }

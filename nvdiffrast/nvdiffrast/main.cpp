@@ -8,8 +8,8 @@ bool play = false;
 //PresetCube preset;
 //PresetEarth preset;
 //PresetFilter preset;
-//PresetPhong preset;
-PresetPrimitives preset;
+PresetPhong preset;
+//PresetPrimitives preset;
 
 
 static void InitFunc()
@@ -29,9 +29,7 @@ static void IdleFunc(void)
 	if (!play)return;
 	pre = cur;
 	timespec_get(&cur, TIME_UTC);
-	long diff = cur.tv_nsec - pre.tv_nsec;
-	if (diff < 0)diff = 1e9 + cur.tv_nsec - pre.tv_nsec;
-	double dt = double(diff) * 1e-9;
+	double dt = double(cur.tv_sec - pre.tv_sec) + double(cur.tv_nsec - pre.tv_nsec) * 1e-9;
 	double t = double(cur.tv_sec - start.tv_sec) + double(cur.tv_nsec - start.tv_nsec) * 1e-9;
 	preset.update(dt,t, play);
 

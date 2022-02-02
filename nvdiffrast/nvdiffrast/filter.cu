@@ -7,6 +7,7 @@ void Filter::init(FilterParams& flt, RasterizeParams& rast, float* in, int chann
 	flt.kernel.depth = rast.kernel.depth;
 	flt.kernel.channel = channel;
 	flt.kernel.in = in;
+	flt.h_sig = sigma;
 	CUDA_ERROR_CHECK(cudaMalloc(&flt.kernel.sigma, sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMalloc(&flt.kernel.filter, FILTER_MAX_SIZE * sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMemcpy(flt.kernel.sigma, &sigma, sizeof(float), cudaMemcpyHostToDevice));
@@ -61,15 +62,14 @@ __global__ void FilterForwardKernelVertical(const FilterKernelParams flt) {
 void Filter::forward(FilterParams& flt) {
 	CUDA_ERROR_CHECK(cudaMemset(flt.kernel.out, 0, flt.Size()));
 	CUDA_ERROR_CHECK(cudaMemset(flt.kernel.buf, 0, flt.Size()));
-	float sigma;
-	CUDA_ERROR_CHECK(cudaMemcpy(&sigma, flt.kernel.sigma, sizeof(float), cudaMemcpyDeviceToHost));
-	int k = int(ceil(sigma * 4.f));
+	CUDA_ERROR_CHECK(cudaMemcpy(&flt.h_sig, flt.kernel.sigma, sizeof(float), cudaMemcpyDeviceToHost));
+	int k = int(ceil(flt.h_sig * 4.f));
 	if (k * 2 > FILTER_MAX_SIZE)k = FILTER_MAX_SIZE / 2;
 	flt.kernel.k = k;
 	float* filter;
 	CUDA_ERROR_CHECK(cudaMallocHost(&filter, (2 * k + 1) * sizeof(float)));
 	float s = 0.f;
-	float s2 = .5f / (sigma * sigma);
+	float s2 = .5f / (flt.h_sig * flt.h_sig);
 	for (int i = -k; i <= k; i++) {
 		filter[i + k] = exp(-i * i * s2);
 		s += filter[i + k];
@@ -163,13 +163,12 @@ void Filter::backward(FilterGradParams& flt) {
 	CUDA_ERROR_CHECK(cudaMemset(flt.grad.buf, 0, flt.Size()));
 	CUDA_ERROR_CHECK(cudaMemset(flt.grad.bufx, 0, flt.Size()));
 	CUDA_ERROR_CHECK(cudaMemset(flt.grad.bufy, 0, flt.Size()));
-	float sigma;
-	CUDA_ERROR_CHECK(cudaMemcpy(&sigma, flt.kernel.sigma, sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_ERROR_CHECK(cudaMemcpy(&flt.h_sig, flt.kernel.sigma, sizeof(float), cudaMemcpyDeviceToHost));
 	int k = flt.kernel.k;
 	float* filter;
 	CUDA_ERROR_CHECK(cudaMallocHost(&filter, (2 * k + 1) * sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMemcpy(filter, flt.kernel.filter, (2 * k + 1) * sizeof(float), cudaMemcpyDeviceToHost));
-	float s2 = .5f / (sigma * sigma);
+	float s2 = .5f / (flt.h_sig * flt.h_sig);
 	for (int i = -k; i <= k; i++) {
 		filter[i + k] *= i * i;
 	}
@@ -180,8 +179,8 @@ void Filter::backward(FilterGradParams& flt) {
 	dim3 grid = getGrid(block, flt.kernel.width, flt.kernel.height, flt.kernel.depth);
 	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterBackwardKernelHorizontal, grid, block, args, 0, NULL));
 	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterBackwardKernelVertical, grid, block, args, 0, NULL));
-	float is3 = 1.f / (sigma * sigma * sigma);
-	float is2 = 2.f / sigma;
+	float is2 = 2.f / flt.h_sig;
+	float is3 = s2 * is2;
 	void* fargs[] = { &flt.kernel,&flt.grad ,&is3,&is2 };
 	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterBackwardKernelFinal, grid, block, fargs, 0, NULL));
 }

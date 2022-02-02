@@ -18,6 +18,10 @@ void Buffer::copy(Buffer& dst, float* src) {
     CUDA_ERROR_CHECK(cudaMemcpy(dst.buffer, src, dst.Size(), cudaMemcpyHostToDevice));
 }
 
+void Buffer::copy(float* dst, Buffer& src) {
+    CUDA_ERROR_CHECK(cudaMemcpy(dst, src.buffer, src.Size(), cudaMemcpyDeviceToHost));
+}
+
 __global__ void BufferLinerKernel(float* buffer, float w, float b, int width, int height) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
@@ -220,6 +224,31 @@ void Attribute::liner(Attribute& attr, float w, float b) {
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
     void* args[] = { &attr.vbo, &w,&b,&attr.vboNum,&attr.dimention };
     CUDA_ERROR_CHECK(cudaLaunchKernel(BufferLinerKernel, grid, block, args, 0, NULL));
+}
+
+__global__ void distanceErrorKernel(const Attribute predict, const Attribute target, float* sum) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    if (px >= predict.vboNum)return;
+    float d = 0.f;
+    for (int i = 0; i < predict.dimention; i++) {
+        float diff = predict.vbo[px * predict.dimention + i] - target.vbo[px * target.dimention + i];
+        d += diff * diff;
+    }
+    atomicAdd(sum, sqrt(d));
+}
+
+float Attribute::distanceError(Attribute& predict, Attribute& target) {
+    dim3 block = getBlock(predict.vboNum, 1);
+    dim3 grid = getGrid(block, predict.vboNum, 1);
+    float* dev;
+    CUDA_ERROR_CHECK(cudaMalloc(&dev, sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemset(dev, 0, sizeof(float)));
+    void* args[] = { &predict, &target, &dev};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(distanceErrorKernel, grid, block, args, 0, NULL));
+    float sum;
+    CUDA_ERROR_CHECK(cudaMemcpy(&sum, dev, sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_ERROR_CHECK(cudaFree(dev));
+    return sum / float(predict.vboNum);
 }
 
 void Attribute::addRandom(Attribute& attr, float min, float max) {

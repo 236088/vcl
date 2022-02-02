@@ -12,6 +12,7 @@ struct Buffer {
 	static void init(Buffer& buf, Buffer& src, int dimention);
 	static void copy(Buffer& dst, Buffer& src);
 	static void copy(Buffer& dst, float* src);
+	static void copy(float* dst, Buffer& src);
 	static void liner(Buffer& buf, float w, float b);
 	static void addRandom(Buffer& buf, float min, float max);
 	static void clamp(Buffer& buf, float min, float max);
@@ -37,6 +38,7 @@ struct Attribute {
 	static void loadOBJ(const char* path, Attribute* pos, Attribute* texel, Attribute* normal); 
 	static void copy(Attribute& dst, Attribute& src);
 	static void liner(Attribute& attr, float w, float b);
+	static float distanceError(Attribute& predict, Attribute& target);
 	static void addRandom(Attribute& attr, float min, float max);
 	static void step(Attribute& attr, float threshold);
 };

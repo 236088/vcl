@@ -100,12 +100,19 @@ class PresetCube {
 
 	Attribute target_pos;
 	Attribute target_color;
-
 	ProjectParams target_proj;
 	RasterizeParams target_rast;
 	InterpolateParams target_intr;
 	AntialiasParams target_aa;
 	GLbuffer gl_target;
+
+	AttributeGrad pos;
+	AttributeGrad color;
+	ProjectGradParams proj;
+	RasterizeGradParams rast;
+	InterpolateGradParams intr;
+	AntialiasGradParams aa;
+	GLbuffer gl;
 
 	ProjectParams hr_target_proj;
 	RasterizeParams hr_target_rast;
@@ -113,48 +120,26 @@ class PresetCube {
 	AntialiasParams hr_target_aa;
 	GLbuffer gl_hr_target;
 
-	AttributeGrad predict_pos;
-	AttributeGrad predict_color;
+	ProjectParams hr_proj;
+	RasterizeParams hr_rast;
+	InterpolateParams hr_intr;
+	AntialiasParams hr_aa;
+	GLbuffer gl_hr;
 
-	ProjectGradParams predict_proj;
-	RasterizeGradParams predict_rast;
-	InterpolateGradParams predict_intr;
-	AntialiasGradParams predict_aa;
-	GLbuffer gl_predict;
+	LossParams loss;
+	AdamParams adam_pos;
+	AdamParams adam_color;
+	float loss_sum;
+	float error_sum;
+	double time;
 
-	ProjectParams hr_predict_proj;
-	RasterizeParams hr_predict_rast;
-	GLbuffer gl_hr_predict;
-
-	LossParams predict_loss;
-	AdamParams predict_adam_pos;
-	AdamParams predict_adam_color;
-
-	AttributeGrad noaa_pos;
-	AttributeGrad noaa_color;
-
-	ProjectGradParams noaa_proj;
-	RasterizeGradParams noaa_rast;
-	InterpolateGradParams noaa_intr;
-	GLbuffer gl_noaa;
-
-	ProjectParams hr_noaa_proj;
-	RasterizeParams hr_noaa_rast;
-	GLbuffer gl_hr_noaa;
-
-	LossParams noaa_loss;
-	AdamParams noaa_adam_pos;
-	AdamParams noaa_adam_color;
-
-	float predict_loss_sum;
-	float noaa_loss_sum;
 	int step;
 	ofstream file;
-	int pause[9]{ 10,20, 50, 100,200,500,1000,2000,5000 };
+	int pause[10]{ 10,20, 50, 100,200,500,1000,2000,5000 ,10000 };
 	int it = 0;
 
 public:
-	const int windowWidth = 1536;
+	const int windowWidth = 1024;
 	const int windowHeight = 1024;
 	void init();
 	void display();
@@ -177,32 +162,25 @@ class PresetEarth {
 	RasterizeParams rast;
 	InterpolateParams intr;
 
-	TextureGrad predict_texture;
-	TexturemapGradParams predict_tex;
+	TextureGrad texture;
+	TexturemapGradParams tex;
 	LossParams loss;
 	AdamParams adam;
 	LossParams tex_loss;
-	GLbuffer gl_tex_predict;
-	GLbuffer gl_predict;
+	GLbuffer gl_tex;
+	GLbuffer gl;
 
-	TextureGrad predict_mip_texture;
-	TexturemapGradParams predict_mip_tex;
-	LossParams mip_loss;
-	AdamParams mip_adam;
-	LossParams mip_tex_loss;
-	GLbuffer gl_tex_mip_predict;
-	GLbuffer gl_mip_predict;
+	float loss_sum;
+	float error_sum;
+	double time;
 
-
-	float mip_loss_sum;
-	float nomip_loss_sum;
 	int step;
 	ofstream file;
-	int pause[6]{ 500, 1000, 2000, 5000,10000 ,20000 };
+	int pause[7]{ 100, 500, 1000, 2000, 5000,10000 ,20000 };
 	int it = 0;
 
 public:
-	const int windowWidth = 1536;
+	const int windowWidth = 1024;
 	const int windowHeight = 1024;
 	void init();
 	void display();
@@ -213,16 +191,28 @@ public:
 
 class PresetFilter {
 	Matrix mat;
+	float target_sigma;
+	float sigma;
 
 	Attribute target_pos;
 	Attribute target_color;
-
 	ProjectParams target_proj;
 	RasterizeParams target_rast;
 	InterpolateParams target_intr;
 	AntialiasParams target_aa;
 	FilterParams target_flt;
-	GLbuffer gl_flt_target;
+	GLbuffer gl_aa_target;
+	GLbuffer gl_target;
+
+	AttributeGrad pos;
+	AttributeGrad color;
+	ProjectGradParams proj;
+	RasterizeGradParams rast;
+	InterpolateGradParams intr;
+	AntialiasGradParams aa;
+	FilterGradParams flt;
+	GLbuffer gl_aa;
+	GLbuffer gl;
 
 	ProjectParams hr_target_proj;
 	RasterizeParams hr_target_rast;
@@ -230,67 +220,27 @@ class PresetFilter {
 	AntialiasParams hr_target_aa;
 	GLbuffer gl_hr_target;
 
-	AttributeGrad predict_pos;
-	AttributeGrad predict_color;
-
-	ProjectGradParams predict_proj;
-	RasterizeGradParams predict_rast;
-	InterpolateGradParams predict_intr;
-	AntialiasGradParams predict_aa;
-	GLbuffer gl_predict;
-
-	ProjectParams hr_predict_proj;
-	RasterizeParams hr_predict_rast;
-	InterpolateParams hr_predict_intr;
-	AntialiasParams hr_predict_aa;
-	GLbuffer gl_hr_predict;
+	ProjectParams hr_proj;
+	RasterizeParams hr_rast;
+	InterpolateParams hr_intr;
+	AntialiasParams hr_aa;
+	GLbuffer gl_hr;
 
 	LossParams loss;
 	AdamParams adam_pos;
 	AdamParams adam_color;
-
-	class Pass {
-		AttributeGrad pos;
-		AttributeGrad color;
-
-		ProjectGradParams proj;
-		RasterizeGradParams rast;
-		InterpolateGradParams intr;
-		AntialiasGradParams aa;
-		FilterGradParams flt;
-		GLbuffer gl;
-
-		ProjectParams hr_proj;
-		RasterizeParams hr_rast;
-		InterpolateParams hr_intr;
-		AntialiasParams hr_aa;
-		GLbuffer gl_hr;
-		RasterizeGradParams wireframe;
-		GLbuffer gl_wireframe;
-
-		LossParams loss;
-		AdamParams adam_pos;
-		AdamParams adam_color;
-		AdamParams adam_sigma;
-	public:
-		void init(Attribute& predict_pos, Attribute& predict_color, Matrix& mat, FilterParams& target_flt, Matrix& hr_mat, int resolution, float sigma);
-		void forward();
-		void draw(float minX, float maxX);
-		float getLoss() { return Loss::loss(loss); };
-	};
-
-	Pass predict1;
+	AdamParams adam_sigma;
 	float loss_sum;
-	float loss_sum1;
+	float error_sum;
+	double time;
 
 	int step;
 	ofstream file;
-	int pause[9]{ 10,20, 50, 100,200,500,1000,2000,5000 };
+	int pause[10]{ 10000,20, 50, 100,200,500,1000,2000,5000 ,10000 };
 	int it = 0;
 
-
 public:
-	const int windowWidth = 2048;
+	const int windowWidth = 1536;
 	const int windowHeight = 1024;
 	void init();
 	void display();
@@ -310,9 +260,9 @@ class PresetPhong {
 	Buffer target_point;
 	Buffer target_intensity;
 	Buffer target_params;
-	BufferGrad predict_point;
-	BufferGrad predict_intensity;
-	BufferGrad predict_params;
+	BufferGrad point;
+	BufferGrad intensity;
+	BufferGrad params;
 
 	ProjectParams proj;
 	RasterizeParams rast;
@@ -321,19 +271,21 @@ class PresetPhong {
 	ProjectParams normal_proj;
 	TexturemapParams target_tex;
 	MaterialParams target_mtr;
-	MaterialGradParams predict_mtr;
+	MaterialGradParams mtr;
 
 	LossParams loss;
 	AdamParams point_adam;
 	AdamParams intensity_adam;
 	AdamParams params_adam;
 
-	GLbuffer predict_buffer;
+	GLbuffer buffer;
 	GLbuffer target_buffer;
 
 	float loss_sum;
+	float* h_params;
+	double time;
+
 	int step;
-	double t;
 	ofstream file;
 	int pause[6]{ 10,100,1000,2000,5000,10000, };
 	int it = 0;
@@ -359,10 +311,10 @@ class PresetPBR {
 	Texture target_rough;
 	Texture target_nor;
 	Texture target_disp;
-	TextureGrad predict_diff;
-	TextureGrad predict_rough;
-	TextureGrad predict_nor;
-	TextureGrad predict_disp;
+	TextureGrad diff;
+	TextureGrad rough;
+	TextureGrad nor;
+	TextureGrad disp;
 
 	NormalcalcParams norm;
 	ProjectParams proj;
@@ -376,20 +328,20 @@ class PresetPBR {
 	TexturemapParams target_disp_tex;
 	MaterialParams target_mtr;
 
-	TexturemapGradParams predict_diff_tex;
-	TexturemapGradParams predict_rough_tex;
-	TexturemapGradParams predict_nor_tex;
-	TexturemapGradParams predict_disp_tex;
-	MaterialGradParams predict_mtr;
+	TexturemapGradParams diff_tex;
+	TexturemapGradParams rough_tex;
+	TexturemapGradParams nor_tex;
+	TexturemapGradParams disp_tex;
+	MaterialGradParams mtr;
 
 	GLbuffer target_diff_buffer;
 	GLbuffer target_rough_buffer;
 	GLbuffer target_nor_buffer;
 	GLbuffer target_mtr_buffer;
-	GLbuffer predict_diff_buffer;
-	GLbuffer predict_rough_buffer;
-	GLbuffer predict_nor_buffer;
-	GLbuffer predict_mtr_buffer;
+	GLbuffer diff_buffer;
+	GLbuffer rough_buffer;
+	GLbuffer nor_buffer;
+	GLbuffer mtr_buffer;
 
 	LossParams loss;
 	AdamParams diff_adam;
