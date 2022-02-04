@@ -21,7 +21,7 @@
 #include <fstream>
 using namespace std;
 
-#define MAX_DIM_PER_BLOCK 32
+#define MAX_DIM_PER_BLOCK 16
 
 dim3 getBlock(int width, int height);
 dim3 getGrid(dim3 block, int width, int height);

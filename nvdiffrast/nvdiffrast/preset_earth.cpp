@@ -1,19 +1,22 @@
 #include "preset.h"
 
 #define CONSOLE_INTERVAL 10
-#define MIP_MODE
+#define MIP 3
 #define DISPLAY_TEXTURE
 #define DISPLAY
 
 void PresetEarth::init() {
-	int mip = 4;
 	loss_sum = 0.f;
 	error_sum = 0.f;
 	time = 0;
 	step = 0;
-	file.open("../../earth_log.txt");
-	//file.open("F:/vcl/picture/earth/earth_log.txt");
-	file << "step, loss" << std::endl;
+#ifdef MIP
+	file.open("../../log/earth_mip_log.txt");
+#else
+	file.open("../../log/earth_nomip_log.txt");
+#endif
+
+	file << "step, loss, time" << std::endl;
 	Attribute::loadOBJ("../../sphere.obj", &pos, &texel, nullptr);
 	Matrix::init(mat);
 	Matrix::setEye(mat, 0.f, 0.f, 3.5f);
@@ -21,18 +24,14 @@ void PresetEarth::init() {
 	Project::init(proj, mat.mvp, pos, true);
 	Rasterize::init(target_rast, proj, 4096, 4096, 1, true);
 	Interpolate::init(target_intr, target_rast, texel);
-#ifdef MIP_MODE
-	Texture::loadBMP("../../earth-texture.bmp", target_texture, mip);
-#else
 	Texture::loadBMP("../../earth-texture.bmp", target_texture, 1);
-#endif
 	Texturemap::init(target_tex, target_rast, target_intr, target_texture);
 	Texture::init(out_tex, target_tex.kernel.out, 4096, 4096, 3, 4);
 
 	Rasterize::init(rast, proj, 512, 512, 1, true);
 	Interpolate::init(intr, rast, texel);
-#ifdef MIP_MODE
-	TextureGrad::init(texture, target_texture.width, target_texture.height, target_texture.channel, mip);
+#ifdef MIP
+	TextureGrad::init(texture, target_texture.width, target_texture.height, target_texture.channel, MIP);
 #else
 	TextureGrad::init(texture, target_texture.width, target_texture.height, target_texture.channel, 1);
 #endif
@@ -69,7 +68,7 @@ void PresetEarth::display() {
 	Texturemap::forward(tex);
 	MSELoss::backward(loss);
 	Texturemap::backward(tex);
-#ifdef MIP_MODE
+#ifdef MIP
 	TextureGrad::gradSumup(texture);
 	Adam::step(adam);
 	Texture::buildMIP(texture);
@@ -103,8 +102,8 @@ void PresetEarth::update(double dt, double t, bool& play) {
 	if ((++step) % CONSOLE_INTERVAL == 0) {
 		loss_sum /= CONSOLE_INTERVAL;
 		error_sum /= CONSOLE_INTERVAL;
-		std::cout << step << ", " << loss_sum << ", " << error_sum << " time:"<< time <<std::endl;
-		file << step << ", " << loss_sum << ", " << error_sum << std::endl;
+		std::cout << step << ", " << loss_sum << ", " << error_sum << " time:"<< time / step <<std::endl;
+		file << step << ", " << loss_sum << ", " << error_sum << ", " << time / step << std::endl;
 		loss_sum = 0.f;
 		error_sum = 0.f;
 	}	

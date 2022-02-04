@@ -4,12 +4,29 @@
 
 void PresetPhong::init() {
 	loss_sum = 0.f;
-	CUDA_ERROR_CHECK(cudaMallocHost(&h_params, 4 * sizeof(float)));
+	CUDA_ERROR_CHECK(cudaMallocHost(&params_, 4 * sizeof(float)));
 	time = 0;
 	step = 0;
-	file.open("../../phong_log.txt");
-	//file.open("F:/vcl/picture/phong/phong_log.txt");
-	file << "step, Ka, Kd, Ks, alpha, predict" << std::endl;
+	float _point[12]{
+		-2.f,2.f,-2.f,
+		2.f,2.f,2.f,
+		2.f,-2.f,-2.f,
+		-2.f,-2.f,2.f,
+	};
+	float _intensity[12]{
+		10.f,10.f,10.f,
+		1.f,1.f,1.f,
+		1.f,1.f,1.f,
+		1.f,1.f,1.f,
+	};
+	float _params[4]{
+		.1f,.5f,.7f,50.f
+	};
+	file.open("../../log/phong_" + std::to_string(_params[0])
+		+ "_" + std::to_string(_params[1])
+		+ "_" + std::to_string(_params[2])
+		+ "_" + std::to_string(_params[3]) + "_log.txt");
+	file << "step, Ka, Kd, Ks, alpha, predict, time" << std::endl;
 	int width = 512;
 	int height = 512;
 	Attribute::loadOBJ("../../spot_triangulated.obj", &pos, &texel, &normal);
@@ -24,21 +41,7 @@ void PresetPhong::init() {
 	Project::init(normal_proj, mat.r, normal, r_normal, false);
 	Texturemap::init(target_tex, rast, intr, target_texture);
 
-	float _point[12]{
-		-2.f,2.f,-2.f,
-		2.f,2.f,2.f,
-		2.f,-2.f,-2.f,
-		-2.f,-2.f,2.f,
-	};
-	float _intensity[12]{
-		10.f,10.f,10.f,
-		1.f,1.f,1.f,
-		1.f,1.f,1.f,
-		1.f,1.f,1.f,
-	};
-	float _params[4]{
-		.1f,.5f,.7f,5.f
-	};
+
 	Buffer::init(target_point, 1, 3);
 	Buffer::copy(target_point, _point);
 	Buffer::init(target_intensity, 1, 3);
@@ -60,9 +63,7 @@ void PresetPhong::init() {
 		0.f,0.f,0.f,
 		0.f,0.f,0.f,
 	};
-	float params_[4]{
-		.0f, .0f, .0f, 1.f
-	};
+	params_[0] = 0.f; params_[1] = 0.f; params_[2] = 0.f; params_[3] = 1.f;
 	BufferGrad::init(point, 1, 3);
 	Buffer::copy(point, _point);
 	BufferGrad::init(intensity, 1, 3);
@@ -97,6 +98,13 @@ void PresetPhong::init() {
 void PresetPhong::display(void) {
 	struct timespec start, end;
 	timespec_get(&start, TIME_UTC);
+	Matrix::forward(mat);
+	Project::forward(proj);
+	Rasterize::forward(rast);
+	Interpolate::forward(intr);
+	Project::forward(pos_proj);
+	Project::forward(normal_proj);
+	Texturemap::forward(target_tex);
 	PhongMaterial::forward(mtr);
 	MSELoss::backward(loss);
 	PhongMaterial::backward(mtr);
@@ -123,14 +131,21 @@ void PresetPhong::display(void) {
 void PresetPhong::update(double dt, double t, bool& play) {
 	loss_sum += Loss::loss(loss);
 	if ((++step) % CONSOLE_INTERVAL == 0) {
-		Buffer::copy(h_params, params);
+		Buffer::copy(params_, params);
 		loss_sum /= CONSOLE_INTERVAL;
-		std::cout << step << ", " << loss_sum << ", " << h_params[0] << ", " << h_params[1] << ", " << h_params[2] << ", " << h_params[3] << " time:" << time << std::endl;
-		file << step << ", " << loss_sum << ", " << h_params[0] << ", " << h_params[1] << ", " << h_params[2] << ", " << h_params[3] << std::endl;
+		std::cout << step << ", " << loss_sum
+			<< ", " << params_[0]
+			<< ", " << params_[1]
+			<< ", " << params_[2]
+			<< ", " << params_[3] << " time:" << time / step << std::endl;
+		file << step << ", " << loss_sum
+			<< ", " << params_[0]
+			<< ", " << params_[1]
+			<< ", " << params_[2]
+			<< ", " << params_[3] << ", " << time / step << std::endl;
 		loss_sum = 0.f;
 	}
-	if (step == pause[5]) {
-		exit(0);
+	if (step == pause[it]) {
 		play = false;
 		it++;
 	}

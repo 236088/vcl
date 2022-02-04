@@ -15,7 +15,7 @@ PresetPhong preset;
 static void InitFunc()
 {
 	timespec_get(&start, TIME_UTC);
-	//srand(cur.tv_nsec);
+	srand(0);
 	preset.init();
 }
 

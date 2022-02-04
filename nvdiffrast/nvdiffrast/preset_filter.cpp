@@ -7,15 +7,16 @@
 
 void PresetFilter::init() {
 	int resolution = 32;
-	target_sigma = 16.f;
-	sigma = 1.f;
+	target_sigma = 9.f;
+	sigma = 11.f;
 	loss_sum = 0.f;
 	error_sum = 0.f;
 	time = 0;
 	step = 0;
-	file.open("../../cube_log_" + std::to_string(resolution) + ".txt");
-	//file.open("F:/vcl/picture/cube/cube_log_"+std::to_string(resolution)+".txt");
-	file << "step, loss, error, sigma" << std::endl;
+	file.open("../../log/cube_log_" + std::to_string(target_sigma)
+		+ "_" + std::to_string(sigma) + "_"
+		+ std::to_string(resolution) + ".txt");
+	file << "step, loss, error, sigma, time" << std::endl;
 
 	Matrix::init(mat);
 	Matrix::setEye(mat, 0.f, 0.f, 3.5f);
@@ -49,9 +50,9 @@ void PresetFilter::init() {
 	Optimizer::init(adam_pos, pos);
 	Optimizer::init(adam_color, color);
 	Optimizer::init(adam_sigma, flt.kernel.sigma, flt.grad.sigma, 1, 1, 1, 1);
-	Adam::setHyperParams(adam_pos, 1e-2, 0.9, 0.99, 1e-8);
-	Adam::setHyperParams(adam_color, 1e-2, 0.9, 0.99, 1e-8);
-	Adam::setHyperParams(adam_sigma, 1e-1, 0.9, 0.99, 1e-8);
+	Adam::setHyperParams(adam_pos, 1e-3, 0.9, 0.999, 1e-8);
+	Adam::setHyperParams(adam_color, 1e-3, 0.9, 0.999, 1e-8);
+	Adam::setHyperParams(adam_sigma, 1e-2, 0.9, 0.999, 1e-8);
 
 #ifdef DISPLAY_HIGH_RESOLUTION
 	Project::init(hr_target_proj, mat.mvp, target_pos, true);
@@ -139,8 +140,8 @@ void PresetFilter::update(double dt, double t, bool& play) {
 	if ((++step) % CONSOLE_INTERVAL == 0) {
 		loss_sum /= CONSOLE_INTERVAL;
 		error_sum /= CONSOLE_INTERVAL;
-		std::cout << step << ", " << loss_sum << ", " << error_sum <<  ", " << flt.h_sig << " time:" << time << std::endl;
-		file << step << ", " << loss_sum << ", " << error_sum << ", " << flt.h_sig << std::endl;
+		std::cout << step << ", " << loss_sum << ", " << error_sum <<  ", " << flt.h_sig << " time:" << time / step << std::endl;
+		file << step << ", " << loss_sum << ", " << error_sum << ", " << flt.h_sig << ", " << time / step << std::endl;
 		loss_sum = 0.f;
 		error_sum = 0.f;
 	}
