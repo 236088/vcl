@@ -97,6 +97,7 @@ public:
 
 class PresetCube {
 	Matrix mat;
+	Matrix hr_mat;
 
 	Attribute target_pos;
 	Attribute target_color;
@@ -124,6 +125,8 @@ class PresetCube {
 
 	ProjectParams hr_predict_proj;
 	RasterizeParams hr_predict_rast;
+	InterpolateParams hr_predict_intr;
+	AntialiasParams hr_predict_aa;
 	GLbuffer gl_hr_predict;
 
 	LossParams predict_loss;
@@ -140,6 +143,8 @@ class PresetCube {
 
 	ProjectParams hr_noaa_proj;
 	RasterizeParams hr_noaa_rast;
+	InterpolateParams hr_noaa_intr;
+	AntialiasParams hr_noaa_aa;
 	GLbuffer gl_hr_noaa;
 
 	LossParams noaa_loss;
@@ -150,7 +155,7 @@ class PresetCube {
 	float noaa_loss_sum;
 	int step;
 	ofstream file;
-	int pause[9]{ 10,20, 50, 100,200,500,1000,2000,5000 };
+	int pause[9]{ 100,1000, 5000, 10000,200,500,1000,2000,5000 };
 	int it = 0;
 
 public:
@@ -213,16 +218,18 @@ public:
 
 class PresetFilter {
 	Matrix mat;
+	Matrix hr_mat;
+	float sigma;
 
 	Attribute target_pos;
 	Attribute target_color;
-
+	Attribute random_pos;
+	Attribute random_color;
 	ProjectParams target_proj;
 	RasterizeParams target_rast;
 	InterpolateParams target_intr;
 	AntialiasParams target_aa;
-	FilterParams target_flt;
-	GLbuffer gl_flt_target;
+	GLbuffer gl_aa_target;
 
 	ProjectParams hr_target_proj;
 	RasterizeParams hr_target_rast;
@@ -230,67 +237,50 @@ class PresetFilter {
 	AntialiasParams hr_target_aa;
 	GLbuffer gl_hr_target;
 
-	AttributeGrad predict_pos;
-	AttributeGrad predict_color;
-
-	ProjectGradParams predict_proj;
-	RasterizeGradParams predict_rast;
-	InterpolateGradParams predict_intr;
-	AntialiasGradParams predict_aa;
-	GLbuffer gl_predict;
-
-	ProjectParams hr_predict_proj;
-	RasterizeParams hr_predict_rast;
-	InterpolateParams hr_predict_intr;
-	AntialiasParams hr_predict_aa;
-	GLbuffer gl_hr_predict;
-
-	LossParams loss;
-	AdamParams adam_pos;
-	AdamParams adam_color;
-
 	class Pass {
 		AttributeGrad pos;
 		AttributeGrad color;
-
 		ProjectGradParams proj;
 		RasterizeGradParams rast;
 		InterpolateGradParams intr;
 		AntialiasGradParams aa;
 		FilterGradParams flt;
+		GLbuffer gl_aa;
 		GLbuffer gl;
+
+		FilterParams target_flt;
+		GLbuffer gl_target;
 
 		ProjectParams hr_proj;
 		RasterizeParams hr_rast;
 		InterpolateParams hr_intr;
 		AntialiasParams hr_aa;
 		GLbuffer gl_hr;
-		RasterizeGradParams wireframe;
-		GLbuffer gl_wireframe;
 
 		LossParams loss;
 		AdamParams adam_pos;
 		AdamParams adam_color;
 		AdamParams adam_sigma;
-	public:
-		void init(Attribute& predict_pos, Attribute& predict_color, Matrix& mat, FilterParams& target_flt, Matrix& hr_mat, int resolution, float sigma);
-		void forward();
-		void draw(float minX, float maxX);
-		float getLoss() { return Loss::loss(loss); };
-	};
 
-	Pass predict1;
-	float loss_sum;
-	float loss_sum1;
+	public:		
+		float loss_sum;
+		double time;
+		void init(RasterizeParams& target_rast, AntialiasParams& target_aa, Attribute& random_pos, Attribute& random_color, Matrix& mat, Matrix& hr_mat, int resolution, float target_sigma, float sigma);
+		void display();
+		void draw(float minX, float maxX);
+	};
+	Pass filter3;
+	Pass filter5;
+	Pass filter7;
+	Pass filter9;
 
 	int step;
 	ofstream file;
-	int pause[9]{ 10,20, 50, 100,200,500,1000,2000,5000 };
+	int pause[11]{ 10,20, 50, 100,200,500,1000,2000,5000 ,10000 ,20000 };
 	int it = 0;
 
-
 public:
-	const int windowWidth = 2048;
+	const int windowWidth = 1280;
 	const int windowHeight = 1024;
 	void init();
 	void display();

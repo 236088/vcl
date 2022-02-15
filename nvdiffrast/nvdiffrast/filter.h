@@ -30,6 +30,7 @@ struct FilterKernelGradParams {
 };
 
 struct FilterParams {
+	float h_sig;
 	FilterKernelParams kernel;
 	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * kernel.channel * sizeof(float); };
 };
