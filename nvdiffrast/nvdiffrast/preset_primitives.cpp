@@ -46,7 +46,7 @@ void PresetPrimitives::init() {
 	//Material::init(mtr, *(float3*)&mat.eye, point, intensity);
 	//Material::init(mtr, params);
 	Antialias::init(aa, rast, proj, mip_tex.kernel.out, 3);
-	Filter::init(flt, rast, aa.kernel.out, 3, 40);
+	Filter::init(flt, rast, aa.kernel.out, 3, 60);
 	//Rasterize::wireframeinit(wireframe, proj, width, height);
 	//Rasterize::idhashinit(idhash, proj, width, height);
 

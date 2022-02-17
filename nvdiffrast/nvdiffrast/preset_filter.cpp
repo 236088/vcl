@@ -29,14 +29,14 @@ void PresetFilter::Pass::init(RasterizeParams& target_rast, AntialiasParams& tar
 	Adam::setHyperParams(adam_sigma, 1e-2, 0.9, 0.999, 1e-8);
 #ifdef WIREFRAME
 	Project::init(hr_proj, mat.mvp, pos, true);
-	Rasterize::wireframeinit(hr_rast, hr_proj, 256, 256);
-	GLbuffer::init(gl_hr, hr_rast.kernel.out, 256, 256, 4);
+	Rasterize::wireframeinit(hr_rast, hr_proj, 512, 512);
+	GLbuffer::init(gl_hr, hr_rast.kernel.out, 512, 512, 4);
 #else
 	Project::init(hr_proj, hr_mat.mvp, pos, true);
-	Rasterize::init(hr_rast, hr_proj, 256, 256, 1, false);
+	Rasterize::init(hr_rast, hr_proj, 512, 512, 1, false);
 	Interpolate::init(hr_intr, hr_rast, color);
 	Antialias::init(hr_aa, hr_rast, hr_proj, hr_intr.kernel.out, 3);
-	GLbuffer::init(gl_hr, hr_aa.kernel.out, 256, 256, 3);
+	GLbuffer::init(gl_hr, hr_aa.kernel.out, 512, 512, 3);
 #endif
 	GLbuffer::init(gl_aa, aa.kernel.out, resolution, resolution, 3);
 	GLbuffer::init(gl_target, target_flt.kernel.out, resolution, resolution, 3);
@@ -79,20 +79,17 @@ void PresetFilter::init() {
 	Antialias::init(target_aa, target_rast, target_proj, target_intr.kernel.out, 3);
 #ifdef WIREFRAME
 	Project::init(hr_target_proj, mat.mvp, target_pos, true);
-	Rasterize::wireframeinit(hr_target_rast, hr_target_proj, 256, 256);
-	GLbuffer::init(gl_hr_target, hr_target_rast.kernel.out, 256, 256, 4);
+	Rasterize::wireframeinit(hr_target_rast, hr_target_proj, 512, 512);
+	GLbuffer::init(gl_hr_target, hr_target_rast.kernel.out, 512, 512, 4);
 #else
 	Project::init(hr_target_proj, hr_mat.mvp, target_pos, true);
-	Rasterize::init(hr_target_rast, hr_target_proj, 256, 256, 1, false);
+	Rasterize::init(hr_target_rast, hr_target_proj, 512, 512, 1, false);
 	Interpolate::init(hr_target_intr, hr_target_rast, target_color);
 	Antialias::init(hr_target_aa, hr_target_rast, hr_target_proj, hr_target_intr.kernel.out, 3);
-	GLbuffer::init(gl_hr_target, hr_target_aa.kernel.out, 256, 256, 3);
+	GLbuffer::init(gl_hr_target, hr_target_aa.kernel.out, 512, 512, 3);
 #endif
 	GLbuffer::init(gl_aa_target, target_aa.kernel.out, resolution, resolution, 3);
-	filter3.init(target_rast, target_aa, random_pos, random_color, mat, hr_mat, 32, 9, 1);
-	filter5.init(target_rast, target_aa, random_pos, random_color, mat, hr_mat, 32, 5, 1);
-	filter7.init(target_rast, target_aa, random_pos, random_color, mat, hr_mat, 32, 5, 9);
-	filter9.init(target_rast, target_aa, random_pos, random_color, mat, hr_mat, 32, 1, 9);
+	filter.init(target_rast, target_aa, random_pos, random_color, mat, hr_mat, 32, 1, 10);
 }
 
 void PresetFilter::Pass::display() {
@@ -131,11 +128,11 @@ void PresetFilter::Pass::display() {
 }
 
 void PresetFilter::Pass::draw(float minX, float maxX) {
-	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, minX, -1.f, maxX, -.5f);
-	GLbuffer::draw(gl, GL_RGB32F, GL_RGB, minX, -.5f, maxX, -0.f);
-	GLbuffer::draw(gl_aa, GL_RGB32F, GL_RGB, minX, 0.f, maxX, .5f);
+	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, 0.f, -1.f, .5f, 0.f);
+	GLbuffer::draw(gl, GL_RGB32F, GL_RGB, -.5f, -1.f, 0.f, 0.f);
+	GLbuffer::draw(gl_aa, GL_RGB32F, GL_RGB, -.5f, 0.f, 0.f, 1.f);
 #ifdef WIREFRAME
-	GLbuffer::draw(gl_hr, GL_RGBA32F, GL_RGBA, minX, .5f, maxX, 1.f);
+	GLbuffer::draw(gl_hr, GL_RGBA32F, GL_RGBA, -1.f, 0.f, -.5f, 1.f);
 #else
 	GLbuffer::draw(gl_hr, GL_RGB32F, GL_RGB, minX, .5f, maxX, 1.f);
 #endif
@@ -152,10 +149,7 @@ void PresetFilter::display() {
 	Interpolate::forward(target_intr);
 	Antialias::forward(target_aa);
 
-	filter3.display();
-	filter5.display();
-	filter7.display();
-	filter9.display();
+	filter.display();
 
 #ifdef WIREFRAME
 	Project::forward(hr_target_proj);
@@ -166,21 +160,18 @@ void PresetFilter::display() {
 	Interpolate::forward(hr_target_intr);
 	Antialias::forward(hr_target_aa);
 #endif
-
+	if (step % 100)return;
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glUseProgram(0);
 	glViewport(0, 0, windowWidth, windowHeight);
 	glEnable(GL_TEXTURE_2D);
-	GLbuffer::draw(gl_aa_target, GL_RGB32F, GL_RGB, .6f, -1.f, 1.f, -.5f);
+	GLbuffer::draw(gl_aa_target, GL_RGB32F, GL_RGB, 0.f, 0.f, .5f, 1.f);
 #ifdef WIREFRAME
-	GLbuffer::draw(gl_hr_target, GL_RGBA32F, GL_RGBA, .6f, .5f, 1.f, 1.f);
+	GLbuffer::draw(gl_hr_target, GL_RGBA32F, GL_RGBA, .5f, 0.f, 1.f, 1.f);
 #else
-	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, .6f, .5f, 1.f, 1.f);
+	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, .5f, .5f, 1.f, 1.f);
 #endif
-	filter3.draw(-1.f, -.6f);
-	filter5.draw(-.6f, -.2f);
-	filter7.draw(-.2f, .2f);
-	filter9.draw(.2f, .6f);
+	filter.draw(-1.f, -.5f);
 	glFlush();
 }
 
@@ -189,10 +180,7 @@ void PresetFilter::update(double dt, double t, bool& play) {
 	if ((++step) % CONSOLE_INTERVAL == 0) {
 	//	loss_sum /= CONSOLE_INTERVAL;
 		std::cout << step << " time:"
-			<< ", " << filter3.time/ step
-			<< ", " << filter5.time/ step
-			<< ", " << filter7.time/ step
-			<< ", " << filter9.time/ step
+			<< ", " << filter.time/ step
 			<< std::endl;
 	//	file << step << ", " << loss_sum << ", " << flt.h_sig << ", " << time / step << std::endl;
 	//	loss_sum = 0.f;

@@ -106,6 +106,7 @@ class PresetCube {
 	RasterizeParams target_rast;
 	InterpolateParams target_intr;
 	AntialiasParams target_aa;
+	GLbuffer gl_noaa_target;
 	GLbuffer gl_target;
 
 	ProjectParams hr_target_proj;
@@ -159,7 +160,7 @@ class PresetCube {
 	int it = 0;
 
 public:
-	const int windowWidth = 1536;
+	const int windowWidth = 2048;
 	const int windowHeight = 1024;
 	void init();
 	void display();
@@ -269,10 +270,7 @@ class PresetFilter {
 		void display();
 		void draw(float minX, float maxX);
 	};
-	Pass filter3;
-	Pass filter5;
-	Pass filter7;
-	Pass filter9;
+	Pass filter;
 
 	int step;
 	ofstream file;
@@ -280,7 +278,7 @@ class PresetFilter {
 	int it = 0;
 
 public:
-	const int windowWidth = 1280;
+	const int windowWidth = 2048;
 	const int windowHeight = 1024;
 	void init();
 	void display();

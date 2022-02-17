@@ -1,5 +1,5 @@
 #include "filter.h"
-#define FILTER_MAX_SIZE 255
+#define FILTER_MAX_SIZE 1023
 
 void Filter::init(FilterParams& flt, RasterizeParams& rast, float* in, int channel, float sigma) {
 	flt.kernel.width = rast.kernel.width;
