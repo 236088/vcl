@@ -1,19 +1,17 @@
 #include "preset.h"
 
 void PresetPrimitives::init() {
-	int width = 1024;
-	int height = 1024;
+	int width = 512;
+	int height = 512;
 	Attribute::loadOBJ("../../monkey.obj", &pos, &texel, &normal);
 	Attribute::init(color, pos, 3);
 	Attribute::addRandom(color, 0.f, 1.f);
 	Attribute::step(color, .5f);
 	Texture::loadBMP("../../uvtemplate.bmp", mip_texture, 8);
 	//Texture::loadBMP("../../uvtemplate.bmp", texture, 1);
-	Matrix::init(mat);
-	Matrix::setRotation(mat, 30.f, 0.f, 1.f, 0.f);
-	Matrix::setFovy(mat, 30.f);
-	Matrix::setEye(mat, 0.f, 0.f, 5.f);
-	Project::init(proj, mat.mvp, pos, true);
+	Transform::init(tf, glm::radians(30.f), 0.f, 1.f, 0.f);
+	Camera::init(cam, tf, 0.f, 2.f, 5.f, 0.f, -.5f, .5f, 1.f, 1.f, 100.f);
+	Project::init(proj, cam.out, pos, true);
 	Rasterize::init(rast, proj, width, height, 1, true);
 	Interpolate::init(intr, rast, texel);
 	//Interpolate::init(color_intr, rast, color);
@@ -43,10 +41,10 @@ void PresetPrimitives::init() {
 	//Buffer::copy(intensity, _intensity);
 	//Buffer::copy(params, _params);
 	//Material::init(mtr, rast, pos_proj, normal_proj, &texel, 3, mip_tex.kernel.out);
-	//Material::init(mtr, *(float3*)&mat.eye, point, intensity);
+	//Material::init(mtr, *(float3*)&mat.pos, point, intensity);
 	//Material::init(mtr, params);
 	Antialias::init(aa, rast, proj, mip_tex.kernel.out, 3);
-	Filter::init(flt, rast, aa.kernel.out, 3, 60);
+	//Filter::init(flt, rast, aa.kernel.out, 3, 60);
 	//Rasterize::wireframeinit(wireframe, proj, width, height);
 	//Rasterize::idhashinit(idhash, proj, width, height);
 
@@ -56,14 +54,17 @@ void PresetPrimitives::init() {
 	//GLbuffer::init(tex_buffer, tex.kernel.out, width, height, 3);
 	//GLbuffer::init(mip_tex_buffer, mip_tex.kernel.out, width, height, 3);
 	//GLbuffer::init(mtr_buffer, mtr.kernel.out, width, height, 3);
-	//GLbuffer::init(aa_buffer, aa.kernel.out, width, height, 3);
-	GLbuffer::init(flt_buffer, flt.kernel.out, width, height, 3);
+	GLbuffer::init(aa_buffer, aa.kernel.out, width, height, 3);
+	//GLbuffer::init(flt_buffer, flt.kernel.out, width, height, 3);
 	//GLbuffer::init(wireframe_buffer, wireframe.kernel.out, width, height, 4);
 	//GLbuffer::init(idhash_buffer, idhash.kernel.out, width, height, 4);
 }
 
 void PresetPrimitives::display(void) {
-	Matrix::forward(mat);
+	Transform::forward(tf);
+	Camera::forward(cam);
+	glm::mat4 mat;
+	CUDA_ERROR_CHECK(cudaMemcpy(&mat, cam.out, 16 * sizeof(float), cudaMemcpyDeviceToHost));
 	Project::forward(proj);
 	Rasterize::forward(rast);
 	Interpolate::forward(intr);
@@ -74,7 +75,7 @@ void PresetPrimitives::display(void) {
 	//Project::forward(normal_proj);
 	//PhongMaterial::forward(mtr);
 	Antialias::forward(aa);
-	Filter::forward(flt);
+	//Filter::forward(flt);
 	//Rasterize::drawforward(wireframe);
 	//Rasterize::drawforward(idhash);
 
@@ -90,11 +91,12 @@ void PresetPrimitives::display(void) {
 	//GLbuffer::draw(aa_buffer, GL_RGB32F, GL_RGB, 0.f, -1.f, .5f, 0.f);
 	//GLbuffer::draw(flt_buffer, GL_RGB32F, GL_RGB, .5f, -1.f, 1.f, 0.f);
 	//GLbuffer::draw(wireframe_buffer, GL_RGB32F, GL_RGBA, 0.f, 0.f, .5f, 1.f);
-	GLbuffer::draw(flt_buffer, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 1.f);
+	GLbuffer::draw(aa_buffer, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 1.f);
 	//GLbuffer::draw(mip_tex_buffer, GL_RGB32F, GL_RGB, 0.f, -1.f, 1.f, 1.f);
 	glFlush();
 }
 
 void PresetPrimitives::update(double dt, double t, bool& play) {
-	Matrix::addRotation(mat, .25f, 0.f, 1.f, 0.f);
+	//Transform::setRandomRotation(tf);
+	Transform::addRotation(tf, .01f, 0.f, 1.f, 0.f);
 }

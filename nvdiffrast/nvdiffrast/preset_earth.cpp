@@ -7,10 +7,11 @@ void PresetEarth::init() {
 	mip_loss_sum = 0.f;
 	nomip_loss_sum = 0.f;
 	step = 0;
-	//file.open("../../earth_log.txt");
-	file.open("F:/vcl/picture/earth/earth_log.txt");
+	file.open("../../earth_log.txt");
+	//file.open("F:/vcl/picture/earth/earth_log.txt");
 	file << "step, predict, noMIP" << std::endl;
 	Attribute::loadOBJ("../../sphere.obj", &pos, &texel, nullptr);
+/*
 	Matrix::init(mat);
 	Matrix::setEye(mat, 0.f, 0.f, 4.f);
 	Matrix::setFovy(mat, 30.f);
@@ -37,7 +38,7 @@ void PresetEarth::init() {
 	Optimizer::init(mip_adam, predict_mip_texture);
 	Adam::setHyperParams(mip_adam, 1e-3, 0.9, 0.99, 1e-8);
 	Loss::init(mip_tex_loss, target_texture.texture[0], predict_mip_texture.texture[0], nullptr, target_texture.width, target_texture.height, target_texture.channel);
-
+*/
 	GLbuffer::init(gl_predict, predict_tex.kernel.out, 512, 512, 3);
 	GLbuffer::init(gl_tex_predict, &predict_texture.texture[0][2048 * 512 * 3], 2048, 512, 3);
 	GLbuffer::init(gl_mip_predict, predict_mip_tex.kernel.out, 512, 512, 3);
@@ -47,7 +48,7 @@ void PresetEarth::init() {
 }
 
 void PresetEarth::display() {
-	Matrix::forward(mat);
+	//Matrix::forward(mat);
 	Project::forward(proj);
 	Rasterize::forward(target_rast);
 	Interpolate::forward(target_intr);
@@ -102,10 +103,12 @@ void PresetEarth::update(double dt, double t, bool& play) {
 		play = false;
 		it++;
 	}
+/*
 	Matrix::setRandomRotation(mat);
 	float x = (float)rand() / (float)RAND_MAX * 2.f - 1.f;
 	float y = (float)rand() / (float)RAND_MAX * 2.f - 1.f;
 	float z = (float)rand() / (float)RAND_MAX * 48.5f + 1.5f;
 	Matrix::setEye(mat, 0.f, 0.f, z);
 	Matrix::setOrigin(mat, x, y, 0.f);
+*/
 }

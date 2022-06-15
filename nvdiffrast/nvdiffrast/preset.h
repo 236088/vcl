@@ -50,7 +50,8 @@ struct GLbuffer {
 
 
 class PresetPrimitives {
-	Matrix mat;
+	TransformParams tf;
+	CameraParams cam;
 
 	Attribute pos;
 	Attribute texel;
@@ -88,16 +89,18 @@ class PresetPrimitives {
 	GLbuffer idhash_buffer;
 
 public:
-	const int windowWidth = 2048;
-	const int windowHeight = 1024;
+	const int windowWidth = 1024;
+	const int windowHeight = 512;
 	void init();
 	void display();
 	void update(double dt, double t, bool& play);
 };
 
 class PresetCube {
-	Matrix mat;
-	Matrix hr_mat;
+	TransformParams tf;
+	CameraParams cam;
+	TransformParams hr_tf;
+	CameraParams hr_cam;
 
 	Attribute target_pos;
 	Attribute target_color;
@@ -156,7 +159,7 @@ class PresetCube {
 	float noaa_loss_sum;
 	int step;
 	ofstream file;
-	int pause[9]{ 100,1000, 5000, 10000,200,500,1000,2000,5000 };
+	int pause[10]{ 10000,100,1000 ,10000,20,50,200,500,2000, 5000};
 	int it = 0;
 
 public:
@@ -168,7 +171,7 @@ public:
 };
 
 class PresetEarth {
-	Matrix mat;
+	Transform mat;
 	Attribute pos;
 	Attribute texel;
 	ProjectParams proj;
@@ -218,14 +221,15 @@ public:
 //original preset
 
 class PresetFilter {
-	Matrix mat;
-	Matrix hr_mat;
-	float sigma;
+	TransformParams tf;
+	CameraParams cam;
+	TransformParams hr_tf;
+	CameraParams hr_cam;
 
 	Attribute target_pos;
 	Attribute target_color;
-	Attribute random_pos;
-	Attribute random_color;
+	Attribute predict_pos;
+	Attribute predict_color;
 	ProjectParams target_proj;
 	RasterizeParams target_rast;
 	InterpolateParams target_intr;
@@ -239,6 +243,7 @@ class PresetFilter {
 	GLbuffer gl_hr_target;
 
 	class Pass {
+	public:
 		AttributeGrad pos;
 		AttributeGrad color;
 		ProjectGradParams proj;
@@ -258,23 +263,24 @@ class PresetFilter {
 		AntialiasParams hr_aa;
 		GLbuffer gl_hr;
 
-		LossParams loss;
 		AdamParams adam_pos;
 		AdamParams adam_color;
 		AdamParams adam_sigma;
 
-	public:		
+		LossParams loss;
 		float loss_sum;
 		double time;
-		void init(RasterizeParams& target_rast, AntialiasParams& target_aa, Attribute& random_pos, Attribute& random_color, Matrix& mat, Matrix& hr_mat, int resolution, float target_sigma, float sigma);
+		void init(RasterizeParams& target_rast, AntialiasParams& target_aa, Attribute& predict_pos, Attribute& predict_color, CameraParams& cam, CameraParams& hr_cam, int resolution, float target_sigma, float sigma);
 		void display();
 		void draw(float minX, float maxX);
 	};
 	Pass filter;
 
+	float pos_loss_sum;
+	int batch;
 	int step;
 	ofstream file;
-	int pause[11]{ 10,20, 50, 100,200,500,1000,2000,5000 ,10000 ,20000 };
+	int pause[10]{ 10000, 100,1000 ,10000,20, 50,200,500,2000,5000 };
 	int it = 0;
 
 public:
@@ -287,7 +293,7 @@ public:
 
 class PresetPhong {
 
-	Matrix mat;
+	Transform mat;
 
 	Attribute pos;
 	Attribute texel;
@@ -336,7 +342,8 @@ public:
 
 class PresetPBR {
 	int batch;
-	Matrix mat;
+	TransformParams tf;
+	CameraParams cam;
 
 	Attribute pos;
 	Attribute texel;

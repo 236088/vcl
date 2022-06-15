@@ -26,6 +26,7 @@ void PresetPBR::init() {
 	Texture::liner(target_nor, 2.f, -1.f);
 	Texture::normalize(target_nor);
 	Texture::loadBMP("../../Tiles074_1K_Displacement.bmp", target_disp, 1);
+/*
 	Matrix::init(mat);
 	Matrix::setEye(mat, 0.f, 2.f, 4.f);
 	Matrix::setFovy(mat, 30.f);
@@ -64,7 +65,7 @@ void PresetPBR::init() {
 	Adam::setHyperParams(diff_adam, 1e-2, 0.f, 0.f, 1e-8);
 	Adam::setHyperParams(rough_adam, 1e-2, 0.f, 0.f, 1e-8);
 	Adam::setHyperParams(nor_adam, 1e-2, 0.f, 0.f, 1e-8);
-
+*/
 	GLbuffer::init(target_diff_buffer, target_diff.texture[0], target_diff.width, target_diff.height, 3);
 	GLbuffer::init(target_rough_buffer, target_rough.texture[0], target_rough.width, target_rough.height, 1);
 	GLbuffer::init(target_nor_buffer, target_nor.texture[0], target_nor.width, target_nor.height, 3);
@@ -76,7 +77,7 @@ void PresetPBR::init() {
 }
 
 void PresetPBR::display(void) {
-	Matrix::forward(mat);
+	//Matrix::forward(mat);
 	Project::forward(proj);
 	Rasterize::forward(rast);
 	Interpolate::forward(intr);
@@ -135,5 +136,5 @@ void PresetPBR::display(void) {
 }
 
 void PresetPBR::update(double dt, double t, bool& play) {
-	Matrix::setRandomRotation(mat);
+	//Matrix::setRandomRotation(mat);
 }

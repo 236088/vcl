@@ -2,45 +2,56 @@
 
 #define CONSOLE_INTERVAL 10
 #define WIREFRAME
+//#define MONKEY
 
 void PresetCube::init() {
-	int resolution = 32;
+	int resolution = 512;
 	predict_loss_sum = 0.f;
 	noaa_loss_sum = 0.f;
 	step = 0;
-	file.open("../../cube_log_"+std::to_string(resolution)+".txt");
-	file.open("F:/vcl/picture/cube/cube_log_"+std::to_string(resolution)+".txt");
+	file.open("../../log/cube_log_"+std::to_string(resolution)+".txt");
+	//file.open("F:/vcl/picture/cube/cube_log_"+std::to_string(resolution)+".txt");
 	file << "step, predict, noAA" << std::endl;
-
-	Matrix::init(mat);
-	Matrix::setEye(mat, 0.f, 0.f, 3.5f);
-	Matrix::setFovy(mat, 45.f);
+	
+	Transform::init(tf, 0.f, 0.f, 1.f, 0.f);
+	Transform::setRotation(tf, -45.f, -.5f, 1.f, 0.f);
+	Camera::init(cam, tf, 0.f, 0.f, 3.5f, 0.f, 0.f, .5f, 1.f, 1.f, 10.f);
 #ifndef WIREFRAME
-	//Matrix::init(hr_mat);
-	//Matrix::setEye(hr_mat, 0.f, 1.f, 3.f);
-	//Matrix::setFovy(hr_mat, 45.f);
+	Transform::init(hr_tf, 0.f, 0.f, 1.f, 0.f);
+	Camera::init(hr_cam, hr_tf, 0.f, 0.f, 3.5f, 0.f, 0.f, .5f, 1.f, 1.f, 10.f);
 #endif
 
+#ifdef MONKEY
+	Attribute::loadOBJ("../../monkey.obj", &target_pos, nullptr, nullptr);
+	Attribute::init(target_color, target_pos, 3);
+	Attribute::addRandom(target_color, 0.f, 1.f);
+
+	AttributeGrad::loadOBJ("../../sphere.obj", &predict_pos, nullptr, nullptr);
+	AttributeGrad::init(predict_pos);
+	AttributeGrad::init(predict_color, predict_pos, 3);
+	Attribute::liner(predict_color, 0.f, 1.f);
+#else
 	Attribute::loadOBJ("../../cube.obj", &target_pos, nullptr, nullptr);
 
 	Attribute::init(target_color, target_pos, 3);
 	Attribute::copy(target_color, target_pos);
 	Attribute::liner(target_color, 1.f, .5f);
 
-	Project::init(target_proj, mat.mvp, target_pos, true);
+	AttributeGrad::init(predict_pos, target_pos.vboNum, target_pos.vaoNum, 3);
+	Attribute::copy(predict_pos, target_pos);
+	Attribute::addRandom(predict_pos, -.5f, .5f);
+	AttributeGrad::init(predict_color, predict_pos, 3);
+	Attribute::addRandom(predict_color, 0.f, 1.f);
+#endif
+
+	Project::init(target_proj, cam.out, target_pos, true);
 	Rasterize::init(target_rast, target_proj, resolution, resolution, 1, false);
 	Interpolate::init(target_intr,target_rast, target_color);
 	Antialias::init(target_aa,target_rast, target_proj, target_intr.kernel.out, 3);
 	GLbuffer::init(gl_noaa_target, target_intr.kernel.out, resolution, resolution, 3);
 	GLbuffer::init(gl_target, target_aa.kernel.out, resolution, resolution, 3);
 
-	AttributeGrad::init(predict_pos, target_pos.vboNum, target_pos.vaoNum, 3);
-	Attribute::copy(predict_pos, target_pos);
-	Attribute::addRandom(predict_pos, -.5f, .5f);
-	AttributeGrad::init(predict_color, predict_pos, 3);
-	Attribute::addRandom(predict_color, 0.f, 1.f);
-
-	Project::init(predict_proj, mat.mvp, predict_pos, true);
+	Project::init(predict_proj, cam.out, predict_pos, true);
 	Rasterize::init(predict_rast, predict_proj, resolution, resolution, 1, false);
 	Interpolate::init(predict_intr, predict_rast, predict_color);
 	Antialias::init(predict_aa, predict_rast, predict_proj, predict_intr.kernel.out, predict_intr.grad.out, 3);
@@ -57,7 +68,7 @@ void PresetCube::init() {
 	AttributeGrad::init(noaa_color, predict_color, 3);
 	Attribute::copy(noaa_color, predict_color);
 
-	Project::init(noaa_proj, mat.mvp, noaa_pos, true);
+	Project::init(noaa_proj, cam.out, noaa_pos, true);
 	Rasterize::init(noaa_rast, noaa_proj, resolution, resolution, 1, false);
 	Interpolate::init(noaa_intr, noaa_rast, noaa_color);
 	GLbuffer::init(gl_noaa, noaa_intr.kernel.out, resolution, resolution, 3);
@@ -69,31 +80,31 @@ void PresetCube::init() {
 	Adam::setHyperParams(noaa_adam_color, 1e-3, 0.9, 0.999, 1e-8);
 
 #ifdef WIREFRAME
-	Project::init(hr_target_proj, mat.mvp, target_pos, true);
+	Project::init(hr_target_proj, cam.out, target_pos, true);
 	Rasterize::wireframeinit(hr_target_rast, hr_target_proj, 512, 512);
 	GLbuffer::init(gl_hr_target, hr_target_rast.kernel.out, 512, 512, 4);
 
-	Project::init(hr_predict_proj, mat.mvp, predict_pos, true);
+	Project::init(hr_predict_proj, cam.out, predict_pos, true);
 	Rasterize::wireframeinit(hr_predict_rast, hr_predict_proj, 512, 512);
 	GLbuffer::init(gl_hr_predict, hr_predict_rast.kernel.out, 512, 512, 4);
 
-	Project::init(hr_noaa_proj, mat.mvp, noaa_pos, true);
+	Project::init(hr_noaa_proj, cam.out, noaa_pos, true);
 	Rasterize::wireframeinit(hr_noaa_rast, hr_noaa_proj, 512, 512);
 	GLbuffer::init(gl_hr_noaa, hr_noaa_rast.kernel.out, 512, 512, 4);
 #else
-	Project::init(hr_target_proj, mat.mvp, target_pos, true);
+	Project::init(hr_target_proj, hr_cam.out, target_pos, true);
 	Rasterize::init(hr_target_rast, hr_target_proj, 512, 512, 1, false);
 	Interpolate::init(hr_target_intr, hr_target_rast, target_color);
 	Antialias::init(hr_target_aa, hr_target_rast, hr_target_proj, hr_target_intr.kernel.out, 3);
 	GLbuffer::init(gl_hr_target, hr_target_aa.kernel.out, 512, 512, 3);
 
-	Project::init(hr_predict_proj, mat.mvp, predict_pos, true);
+	Project::init(hr_predict_proj, hr_cam.out, predict_pos, true);
 	Rasterize::init(hr_predict_rast, hr_predict_proj, 512, 512, 1, false);
 	Interpolate::init(hr_predict_intr, hr_predict_rast, predict_color);
 	Antialias::init(hr_predict_aa, hr_predict_rast, hr_predict_proj, hr_predict_intr.kernel.out, 3);
 	GLbuffer::init(gl_hr_predict, hr_predict_aa.kernel.out, 512, 512, 3);
 
-	Project::init(hr_noaa_proj, mat.mvp, noaa_pos, true);
+	Project::init(hr_noaa_proj, hr_cam.out, noaa_pos, true);
 	Rasterize::init(hr_noaa_rast, hr_noaa_proj, 512, 512, 1, false);
 	Interpolate::init(hr_noaa_intr, hr_noaa_rast, noaa_color);
 	Antialias::init(hr_noaa_aa, hr_noaa_rast, hr_noaa_proj, hr_noaa_intr.kernel.out, 3);
@@ -102,9 +113,11 @@ void PresetCube::init() {
 }
 
 void PresetCube::display() {
-	Matrix::forward(mat);
+	Transform::forward(tf);
+	Camera::forward(cam);
 #ifndef WIREFRAME
-	//Matrix::forward(hr_mat);
+	Transform::forward(hr_tf);
+	Camera::forward(hr_cam);
 #endif
 
 	Project::forward(target_proj);
@@ -176,8 +189,8 @@ void PresetCube::display() {
 	GLbuffer::draw(gl_hr_noaa, GL_RGBA32F, GL_RGBA, -1.f, 0.f, -.5f, 1.f);
 #else
 	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, .5f, 0.f, 1.f, 1.f);
-	GLbuffer::draw(gl_hr_predict, GL_RGB32F, GL_RGB, -1.f, 0.f, -.5f, 1.f);
-	GLbuffer::draw(gl_hr_noaa, GL_RGB32F, GL_RGB, -1.f, -1.f, -.5f, 0.f);
+	GLbuffer::draw(gl_hr_noaa, GL_RGB32F, GL_RGB, -1.f, 0.f, -.5f, 1.f);
+	GLbuffer::draw(gl_hr_predict, GL_RGB32F, GL_RGB, -1.f, -1.f, -.5f, 0.f);
 #endif
 	glFlush();
 }
@@ -186,20 +199,24 @@ void PresetCube::update(double dt, double t, bool& play) {
 	noaa_loss_sum += Loss::loss(noaa_loss);
 	predict_loss_sum += Loss::loss(predict_loss);
 	if ((++step) % CONSOLE_INTERVAL == 0) {
-		std::cout << step << "," << predict_loss_sum / CONSOLE_INTERVAL << "," << noaa_loss_sum / CONSOLE_INTERVAL << "time:" << t << std::endl;
-		file << step << "," << predict_loss_sum / CONSOLE_INTERVAL << "," << noaa_loss_sum / CONSOLE_INTERVAL << std::endl;
+		std::cout << step << ","
+			<< predict_loss_sum / CONSOLE_INTERVAL << "," 
+			<< noaa_loss_sum / CONSOLE_INTERVAL << "time:" << t << std::endl;
+		file << step << "," 
+			<< predict_loss_sum / CONSOLE_INTERVAL << "," 
+			<< noaa_loss_sum / CONSOLE_INTERVAL << std::endl;
 		noaa_loss_sum = 0.f;
 		predict_loss_sum = 0.f;
 	}
 	//if (step == pause[it]) {
 	if (step == 10000) {
 		exit(0);
-		play = false;
+		//play = false;
 		it++;
 	}
 
-	Matrix::setRandomRotation(mat);
+	Transform::setRandomRotation(tf);
 #ifndef WIREFRAME
-	//Matrix::addRotation(hr_mat, .1f, 0.f, 1.f, 0.f);
+	Transform::addRotation(hr_tf, .01f, 0.f, 1.f, 0.f);
 #endif
 }

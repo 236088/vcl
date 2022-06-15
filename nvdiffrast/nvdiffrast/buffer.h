@@ -37,7 +37,9 @@ struct Attribute {
 	static void loadOBJ(const char* path, Attribute* pos, Attribute* texel, Attribute* normal); 
 	static void copy(Attribute& dst, Attribute& src);
 	static void liner(Attribute& attr, float w, float b);
+	static float distanceError(Attribute& predict, Attribute& target);
 	static void addRandom(Attribute& attr, float min, float max);
+	static void draw(Attribute& pos, Attribute& color, float3 center, float w);
 	static void step(Attribute& attr, float threshold);
 };
 
@@ -45,6 +47,7 @@ struct AttributeGrad :Attribute {
 	float* grad;
 	static void init(AttributeGrad& attr, int vboNum, int vaoNum, int dimention);
 	static void init(AttributeGrad& attr, Attribute& src, int dimention);
+	static void init(AttributeGrad& attr);
 	static void clear(AttributeGrad& attr);
 };
 

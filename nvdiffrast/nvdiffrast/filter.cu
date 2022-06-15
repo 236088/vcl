@@ -65,6 +65,7 @@ void Filter::forward(FilterParams& flt) {
 	CUDA_ERROR_CHECK(cudaMemcpy(&flt.h_sig, flt.kernel.sigma, sizeof(float), cudaMemcpyDeviceToHost));
 	int k = int(ceil(flt.h_sig * 4.f));
 	if (k * 2 > FILTER_MAX_SIZE)k = FILTER_MAX_SIZE / 2;
+	if (k < 0)k = 0;
 	flt.kernel.k = k;
 	float* filter;
 	CUDA_ERROR_CHECK(cudaMallocHost(&filter, (2 * k + 1) * sizeof(float)));
@@ -184,3 +185,5 @@ void Filter::backward(FilterGradParams& flt) {
 	void* fargs[] = { &flt.kernel,&flt.grad ,&is3,&is2 };
 	CUDA_ERROR_CHECK(cudaLaunchKernel(FilterBackwardKernelFinal, grid, block, fargs, 0, NULL));
 }
+
+

@@ -13,6 +13,7 @@ struct ProjectKernelParams {
 
 struct ProjectKernelGradParams {
 	float* out;
+	float* mat;
 
 	float* vbo;
 };

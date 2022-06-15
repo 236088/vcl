@@ -13,6 +13,7 @@ void PresetPhong::init() {
 	int height = 512;
 	Attribute::loadOBJ("../../spot_triangulated.obj", &pos, &texel, &normal);
 	Texture::loadBMP("../../spot_texture.bmp", target_texture, 4);
+/*
 	Matrix::init(mat);
 	Matrix::setFovy(mat, 30.f);
 	Matrix::setEye(mat, -3.f, 0.f, -3.f);
@@ -91,6 +92,7 @@ void PresetPhong::init() {
 	Project::forward(normal_proj);
 	Texturemap::forward(target_tex);
 	PhongMaterial::forward(target_mtr);
+*/
 }
 
 void PresetPhong::display(void) {

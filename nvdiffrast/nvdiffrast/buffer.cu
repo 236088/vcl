@@ -215,6 +215,32 @@ void Attribute::copy(Attribute& dst, Attribute& src) {
     if(dst.vao!=src.vao)cudaMemcpy(dst.vao, src.vao, dst.vaoSize(), cudaMemcpyDeviceToDevice);
 }
 
+
+__global__ void BufferErrorKernel(float* predict, float* target, float* loss, int size, int dimention) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    if (px >= size)return;
+    float s = 0.f;
+    for (int i = 0; i < dimention; i++) {
+        float e = predict[px * dimention + i] - target[px * dimention + i];
+        s += e * e;
+    }
+    atomicAdd(loss, sqrt(s));
+}
+
+float Attribute::distanceError(Attribute& predict, Attribute& target) {
+    dim3 block = getBlock(predict.vboNum, 1);
+    dim3 grid = getGrid(block, predict.vboNum, 1);
+    float *loss;
+    CUDA_ERROR_CHECK(cudaMalloc(&loss, sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemset(loss, 0, sizeof(float)));
+    void* args[] = { &predict.vbo, &target.vbo, &loss, &predict.vboNum, &predict.dimention };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferErrorKernel, grid, block, args, 0, NULL));
+    float l;
+    CUDA_ERROR_CHECK(cudaMemcpy(&l, loss, sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_ERROR_CHECK(cudaFree(loss));
+    return l / predict.vboNum;
+}
+
 void Attribute::liner(Attribute& attr, float w, float b) {
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
@@ -228,6 +254,26 @@ void Attribute::addRandom(Attribute& attr, float min, float max) {
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
     void* args[] = { &attr.vbo,&min,&max,&attr.vboNum,&attr.dimention, &seed };
     CUDA_ERROR_CHECK(cudaLaunchKernel(BufferRandomKernel, grid, block, args, 0, NULL));
+}
+
+__global__ void BufferDrawKernel(float* pos, float* color, int width, float3 center, float w) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    if (px >= width)return;
+    float3 p = ((float3*)pos)[px];
+    float r = length(p - center) / w;
+    float3 c = make_float3(r - .33333333f, r, r + .33333333f);
+    c.x = clamp(abs(6.f * (round(c.x) - c.x)) - 1.f, 0.f, 1.f);
+    c.y = clamp(abs(6.f * (round(c.y) - c.y)) - 1.f, 0.f, 1.f);
+    c.z = clamp(abs(6.f * (round(c.z) - c.z)) - 1.f, 0.f, 1.f);
+    ((float3*)color)[px] = c;
+}
+
+void Attribute::draw(Attribute& pos, Attribute& color, float3 center, float w){
+    dim3 block = getBlock(pos.vboNum,1);
+    dim3 grid = getGrid(block, pos.vboNum,1);
+    void* args[] = { &pos.vbo,&color.vbo,&pos.vboNum, &center, &w};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferDrawKernel, grid, block, args, 0, NULL));
+
 }
 
 void Attribute::step(Attribute& attr, float threshold) {
@@ -244,6 +290,10 @@ void AttributeGrad::init(AttributeGrad& attr, int vboNum, int vaoNum, int diment
 
 void AttributeGrad::init(AttributeGrad& attr, Attribute& src, int dimention) {
     Attribute::init(attr, src, dimention);
+    CUDA_ERROR_CHECK(cudaMalloc(&attr.grad, attr.vboSize()));
+}
+
+void AttributeGrad::init(AttributeGrad& attr) {
     CUDA_ERROR_CHECK(cudaMalloc(&attr.grad, attr.vboSize()));
 }
 
