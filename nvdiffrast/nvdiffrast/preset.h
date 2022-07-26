@@ -13,28 +13,6 @@
 #include "loss.h"
 #include "optimize.h"
 
-struct NoiseKernelParams {
-	int width;
-	int height;
-	int depth;
-	int channel;
-	float intensity;
-	float* in;
-
-	float* out;
-};
-
-struct NoiseParams {
-	NoiseKernelParams kernel;
-	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * kernel.channel * sizeof(float); };
-};
-
-class Noise {
-public:
-	static void init(NoiseParams& np, RasterizeParams& rast, float* in, int channel, float intensity);
-	static void forward(NoiseParams& np);
-};
-
 struct GLbuffer {
 	GLuint id;
 	float* gl_buffer;
@@ -134,9 +112,6 @@ class PresetCube {
 	double time;
 
 	int step;
-	ofstream file;
-	int pause[11]{ 10,20, 50, 100,200,500,1000,2000,5000 ,10000 ,20000 };
-	int it = 0;
 
 public:
 	const int windowWidth = 1024;
@@ -175,9 +150,6 @@ class PresetEarth {
 	double time;
 
 	int step;
-	ofstream file;
-	int pause[6]{ 500, 1000, 2000, 5000,10000 ,20000 };
-	int it = 0;
 
 public:
 	const int windowWidth = 1024;
@@ -235,9 +207,6 @@ class PresetFilter {
 	double time;
 
 	int step;
-	ofstream file;
-	int pause[11]{ 10,20, 50, 100,200,500,1000,2000,5000 ,10000 ,20000 };
-	int it = 0;
 
 public:
 	const int windowWidth = 1536;
@@ -260,8 +229,6 @@ class PresetPhong {
 	Buffer target_point;
 	Buffer target_intensity;
 	Buffer target_params;
-	BufferGrad point;
-	BufferGrad intensity;
 	BufferGrad params;
 
 	ProjectParams proj;
@@ -274,8 +241,6 @@ class PresetPhong {
 	MaterialGradParams mtr;
 
 	LossParams loss;
-	AdamParams point_adam;
-	AdamParams intensity_adam;
 	AdamParams params_adam;
 
 	GLbuffer buffer;
@@ -286,9 +251,6 @@ class PresetPhong {
 	double time;
 
 	int step;
-	ofstream file;
-	int pause[10]{ 10,20, 50, 100,200,500,1000,2000,5000 ,10000 };
-	int it = 0;
 
 public:
 	const int windowWidth = 1024;
@@ -296,67 +258,4 @@ public:
 	void init();
 	void display(void);
 	void update(double dt, double t, bool& play);
-};
-
-class PresetPBR {
-	int batch;
-	Matrix mat;
-
-	Attribute pos;
-	Attribute texel;
-	Attribute normal;
-	Attribute m_pos;
-	Attribute r_normal;
-	Texture target_diff;
-	Texture target_rough;
-	Texture target_nor;
-	Texture target_disp;
-	TextureGrad diff;
-	TextureGrad rough;
-	TextureGrad nor;
-	TextureGrad disp;
-
-	NormalcalcParams norm;
-	ProjectParams proj;
-	RasterizeParams rast;
-	InterpolateParams intr;
-	ProjectParams pos_proj;
-	ProjectParams normal_proj;
-	TexturemapParams target_diff_tex;
-	TexturemapParams target_rough_tex;
-	TexturemapParams target_nor_tex;
-	TexturemapParams target_disp_tex;
-	MaterialParams target_mtr;
-
-	TexturemapGradParams diff_tex;
-	TexturemapGradParams rough_tex;
-	TexturemapGradParams nor_tex;
-	TexturemapGradParams disp_tex;
-	MaterialGradParams mtr;
-
-	GLbuffer target_diff_buffer;
-	GLbuffer target_rough_buffer;
-	GLbuffer target_nor_buffer;
-	GLbuffer target_mtr_buffer;
-	GLbuffer diff_buffer;
-	GLbuffer rough_buffer;
-	GLbuffer nor_buffer;
-	GLbuffer mtr_buffer;
-
-	LossParams loss;
-	AdamParams diff_adam;
-	AdamParams rough_adam;
-	AdamParams nor_adam;
-	int pause[6]{ 100,200,500,1000,2000,5000 };
-	int it = 0;
-
-
-public:
-	const int windowWidth = 2048;
-	const int windowHeight = 1024;
-	double t;
-	void init();
-	void display(void);
-	void update(double dt, double t, bool& play);
-	float getLoss() { return Loss::loss(loss); };
 };

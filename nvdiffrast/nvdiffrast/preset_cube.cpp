@@ -10,13 +10,6 @@ void PresetCube::init() {
 	error_sum = 0.f;
 	time = 0;
 	step = 0;
-#ifdef ANTIALIAS_MODE
-	file.open("../../log/cube_log_" + std::to_string(resolution) + ".txt");
-#else
-	file.open("../../log/cube_log_noaa_" + std::to_string(resolution) + ".txt");
-#endif
-
-	file << "step, loss, error, time" << std::endl;
 
 	Matrix::init(mat);
 	Matrix::setEye(mat, 0.f, 0.f, 3.5f);
@@ -139,14 +132,8 @@ void PresetCube::update(double dt, double t, bool& play) {
 		loss_sum /= CONSOLE_INTERVAL;
 		error_sum /= CONSOLE_INTERVAL;
 		std::cout << step << ", " << loss_sum << ", " << error_sum << " time:" << time/step << std::endl;
-		file << step << ", " << loss_sum << ", " << error_sum << ", " << time / step << std::endl;
 		loss_sum = 0.f;
 		error_sum = 0.f;
 	}
-	if (step == pause[it]) {
-		play = false;
-		it++;
-	}
-
 	Matrix::setRandomRotation(mat);
 }

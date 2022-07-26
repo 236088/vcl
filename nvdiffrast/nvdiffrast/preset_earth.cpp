@@ -10,13 +10,7 @@ void PresetEarth::init() {
 	error_sum = 0.f;
 	time = 0;
 	step = 0;
-#ifdef MIP
-	file.open("../../log/earth_mip_log.txt");
-#else
-	file.open("../../log/earth_nomip_log.txt");
-#endif
 
-	file << "step, loss, time" << std::endl;
 	Attribute::loadOBJ("../../sphere.obj", &pos, &texel, nullptr);
 	Matrix::init(mat);
 	Matrix::setEye(mat, 0.f, 0.f, 3.5f);
@@ -102,14 +96,9 @@ void PresetEarth::update(double dt, double t, bool& play) {
 	if ((++step) % CONSOLE_INTERVAL == 0) {
 		loss_sum /= CONSOLE_INTERVAL;
 		error_sum /= CONSOLE_INTERVAL;
-		std::cout << step << ", " << loss_sum << ", " << error_sum << " time:"<< time / step <<std::endl;
-		file << step << ", " << loss_sum << ", " << error_sum << ", " << time / step << std::endl;
+		std::cout << step << ", " << loss_sum << ", " << error_sum << " time:" << time / step << std::endl;
 		loss_sum = 0.f;
 		error_sum = 0.f;
-	}	
-	if (step == pause[it]) {
-		play = false;
-		it++;
 	}
 	Matrix::setRandomRotation(mat);
 	float x = (float)rand() / (float)RAND_MAX * 2.f - 1.f;

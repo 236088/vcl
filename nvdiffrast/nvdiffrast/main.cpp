@@ -4,12 +4,11 @@ struct timespec pre, cur, start;
 float loss_sum = 0;
 bool play = false;
 
-//PresetPBR preset;
-//PresetCube preset;
-//PresetEarth preset;
-//PresetFilter preset;
-PresetPhong preset;
 //PresetPrimitives preset;
+//PresetEarth preset;
+//PresetCube preset;
+PresetFilter preset;
+//PresetPhong preset;
 
 
 static void InitFunc()
