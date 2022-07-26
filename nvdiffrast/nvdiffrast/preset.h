@@ -33,8 +33,6 @@ class PresetPrimitives {
 	Attribute pos;
 	Attribute texel;
 	Attribute normal;
-	Attribute color;
-	Texture mip_texture;
 	Texture texture;
 	Buffer point;
 	Buffer intensity;
@@ -43,27 +41,19 @@ class PresetPrimitives {
 	ProjectParams proj;
 	RasterizeParams rast;
 	InterpolateParams intr;
-	InterpolateParams color_intr;
 	ProjectParams pos_proj;
 	ProjectParams normal_proj;
-	TexturemapParams mip_tex;
 	TexturemapParams tex;
 	MaterialParams mtr;
 	AntialiasParams aa;
 	FilterParams flt;
-	RasterizeParams wireframe;
-	RasterizeParams idhash;
 
 	GLbuffer rast_buffer;
 	GLbuffer intr_buffer;
-	GLbuffer color_buffer;
 	GLbuffer tex_buffer;
-	GLbuffer mip_tex_buffer;
 	GLbuffer mtr_buffer;
 	GLbuffer aa_buffer;
 	GLbuffer flt_buffer;
-	GLbuffer wireframe_buffer;
-	GLbuffer idhash_buffer;
 
 public:
 	const int windowWidth = 2048;
@@ -91,6 +81,8 @@ class PresetCube {
 	InterpolateGradParams intr;
 	AntialiasGradParams aa;
 	GLbuffer gl;
+
+	Matrix hr_mat;
 
 	ProjectParams hr_target_proj;
 	RasterizeParams hr_target_rast;
@@ -159,10 +151,53 @@ public:
 	void update(double dt, double t, bool& play);
 };
 
-//original preset
+class PresetPhong {
+
+	Matrix mat;
+
+	Attribute pos;
+	Attribute texel;
+	Attribute normal;
+	Attribute m_pos;
+	Attribute r_normal;
+	Texture target_texture;
+	Buffer target_point;
+	Buffer target_intensity;
+	Buffer target_params;
+	BufferGrad params;
+
+	ProjectParams proj;
+	RasterizeParams rast;
+	InterpolateParams intr;
+	ProjectParams pos_proj;
+	ProjectParams normal_proj;
+	TexturemapParams target_tex;
+	MaterialParams target_mtr;
+	MaterialGradParams mtr;
+
+	LossParams loss;
+	AdamParams params_adam;
+
+	GLbuffer buffer;
+	GLbuffer target_buffer;
+
+	float loss_sum;
+	float* params_;
+	double time;
+
+	int step;
+
+public:
+	const int windowWidth = 1024;
+	const int windowHeight = 512;
+	void init();
+	void display(void);
+	void update(double dt, double t, bool& play);
+};
 
 class PresetFilter {
 	Matrix mat;
+	Matrix hr_mat;
 	float target_sigma;
 	float sigma;
 
@@ -213,49 +248,5 @@ public:
 	const int windowHeight = 1024;
 	void init();
 	void display();
-	void update(double dt, double t, bool& play);
-};
-
-class PresetPhong {
-
-	Matrix mat;
-
-	Attribute pos;
-	Attribute texel;
-	Attribute normal;
-	Attribute m_pos;
-	Attribute r_normal;
-	Texture target_texture;
-	Buffer target_point;
-	Buffer target_intensity;
-	Buffer target_params;
-	BufferGrad params;
-
-	ProjectParams proj;
-	RasterizeParams rast;
-	InterpolateParams intr;
-	ProjectParams pos_proj;
-	ProjectParams normal_proj;
-	TexturemapParams target_tex;
-	MaterialParams target_mtr;
-	MaterialGradParams mtr;
-
-	LossParams loss;
-	AdamParams params_adam;
-
-	GLbuffer buffer;
-	GLbuffer target_buffer;
-
-	float loss_sum;
-	float* params_;
-	double time;
-
-	int step;
-
-public:
-	const int windowWidth = 1024;
-	const int windowHeight = 512;
-	void init();
-	void display(void);
 	void update(double dt, double t, bool& play);
 };

@@ -7,8 +7,8 @@ bool play = false;
 //PresetPrimitives preset;
 //PresetEarth preset;
 //PresetCube preset;
-PresetFilter preset;
 //PresetPhong preset;
+PresetFilter preset;
 
 
 static void InitFunc()

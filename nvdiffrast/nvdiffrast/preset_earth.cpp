@@ -1,7 +1,7 @@
 #include "preset.h"
 
 #define CONSOLE_INTERVAL 10
-#define MIP 3
+#define MIP_MODE
 #define DISPLAY_TEXTURE
 #define DISPLAY
 
@@ -24,8 +24,8 @@ void PresetEarth::init() {
 
 	Rasterize::init(rast, proj, 512, 512, 1, true);
 	Interpolate::init(intr, rast, texel);
-#ifdef MIP
-	TextureGrad::init(texture, target_texture.width, target_texture.height, target_texture.channel, MIP);
+#ifdef MIP_MODE
+	TextureGrad::init(texture, target_texture.width, target_texture.height, target_texture.channel, 3);
 #else
 	TextureGrad::init(texture, target_texture.width, target_texture.height, target_texture.channel, 1);
 #endif
@@ -62,7 +62,7 @@ void PresetEarth::display() {
 	Texturemap::forward(tex);
 	MSELoss::backward(loss);
 	Texturemap::backward(tex);
-#ifdef MIP
+#ifdef MIP_MODE
 	TextureGrad::gradSumup(texture);
 	Adam::step(adam);
 	Texture::buildMIP(texture);

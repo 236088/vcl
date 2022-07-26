@@ -2,10 +2,9 @@
 
 #define CONSOLE_INTERVAL 10
 #define ANTIALIAS_MODE
-#define DISPLAY_HIGH_RESOLUTION
 
 void PresetCube::init() {
-	int resolution = 512;
+	int resolution = 64;
 	loss_sum = 0.f;
 	error_sum = 0.f;
 	time = 0;
@@ -54,17 +53,21 @@ void PresetCube::init() {
 	Adam::setHyperParams(adam_color, 1e-3, 0.9, 0.999, 1e-8);
 
 
-#ifdef DISPLAY_HIGH_RESOLUTION
-	Project::init(hr_target_proj, mat.mvp, target_pos, true);
+	Matrix::init(hr_mat);
+	Matrix::setEye(hr_mat, 0.f, 0.f, 3.5f);
+	Matrix::setFovy(hr_mat, 45.f);
+
+	Project::init(hr_target_proj, hr_mat.mvp, target_pos, true);
 	Rasterize::init(hr_target_rast, hr_target_proj, 512, 512, 1, false);
 	Interpolate::init(hr_target_intr, hr_target_rast, target_color);
 	Antialias::init(hr_target_aa, hr_target_rast, hr_target_proj, hr_target_intr.kernel.out, 3);
 	GLbuffer::init(gl_hr_target, hr_target_aa.kernel.out, 512, 512, 3);
 
-	Project::init(hr_proj, mat.mvp, pos, true);
-	Rasterize::wireframeinit(hr_rast, hr_proj, 512, 512);
-	GLbuffer::init(gl_hr, hr_rast.kernel.out, 512, 512, 4);
-#endif
+	Project::init(hr_proj, hr_mat.mvp, pos, true);
+	Rasterize::init(hr_rast, hr_proj, 512, 512, 1, false);
+	Interpolate::init(hr_intr, hr_rast, color);
+	Antialias::init(hr_aa, hr_rast, hr_proj, hr_intr.kernel.out, 3);
+	GLbuffer::init(gl_hr, hr_aa.kernel.out, 512, 512, 3);
 }
 
 void PresetCube::display() {
@@ -101,27 +104,28 @@ void PresetCube::display() {
 	time += double(end.tv_sec - start.tv_sec) + double(end.tv_nsec - start.tv_nsec) * 1e-9;
 
 
-#ifdef DISPLAY_HIGH_RESOLUTION
+
+	Matrix::forward(hr_mat);
+
 	Project::forward(hr_target_proj);
 	Rasterize::forward(hr_target_rast);
 	Interpolate::forward(hr_target_intr);
 	Antialias::forward(hr_target_aa);
 
 	Project::forward(hr_proj);
-	Rasterize::drawforward(hr_rast);
-#endif
+	Rasterize::forward(hr_rast);
+	Interpolate::forward(hr_intr);
+	Antialias::forward(hr_aa);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glUseProgram(0);
 
 	glViewport(0, 0, windowWidth, windowHeight);
 	glEnable(GL_TEXTURE_2D);
-	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, -1.f, 0.f, 0.f, 1.f);
-	GLbuffer::draw(gl, GL_RGB32F, GL_RGB, 0.f, 0.f, 1.f, 1.f);
-#ifdef DISPLAY_HIGH_RESOLUTION
-	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 0.f);
-	GLbuffer::draw(gl_hr, GL_RGBA32F, GL_RGBA, 0.f, -1.f, 1.f, 0.f);
-#endif
+	GLbuffer::draw(gl_target, GL_RGB32F, GL_RGB, 0.f, 0.f, 1.f, 1.f);
+	GLbuffer::draw(gl, GL_RGB32F, GL_RGB, -1.f, 0.f, 0.f, 1.f);
+	GLbuffer::draw(gl_hr_target, GL_RGB32F, GL_RGB, 0.f, -1.f, 1.f, 0.f);
+	GLbuffer::draw(gl_hr, GL_RGB32F, GL_RGB, -1.f, -1.f, 0.f, 0.f);
 	glFlush();
 }
 
@@ -136,4 +140,5 @@ void PresetCube::update(double dt, double t, bool& play) {
 		error_sum = 0.f;
 	}
 	Matrix::setRandomRotation(mat);
+	Matrix::addRotation(hr_mat, .1f, 0.f, 1.f, 0.f);
 }
