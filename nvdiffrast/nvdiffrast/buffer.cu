@@ -219,6 +219,7 @@ void Attribute::copy(Attribute& dst, Attribute& src) {
     if(dst.vao!=src.vao)cudaMemcpy(dst.vao, src.vao, dst.vaoSize(), cudaMemcpyDeviceToDevice);
 }
 
+//’¸“_‘®«‚ÌüŒ`•ÏŠ·
 void Attribute::liner(Attribute& attr, float w, float b) {
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);

@@ -4,11 +4,19 @@ struct timespec pre, cur, start;
 float loss_sum = 0;
 bool play = false;
 
-//PresetPrimitives preset;
-//PresetEarth preset;
-//PresetCube preset;
-//PresetPhong preset;
+#define PRESET 0
+
+#if PRESET==1
+PresetEarth preset;
+#elif PRESET==2
+PresetCube preset;
+#elif PRESET==3
+PresetPhong preset;
+#elif PRESET==4
 PresetFilter preset;
+#else
+PresetPrimitives preset;
+#endif
 
 
 static void InitFunc()
@@ -35,6 +43,7 @@ static void IdleFunc(void)
 	glutPostRedisplay();
 }
 
+//スペースキーでスタート/ポーズ
 static void KeyboardFunc(unsigned char key, int x, int y) {
 	switch (key)
 	{
