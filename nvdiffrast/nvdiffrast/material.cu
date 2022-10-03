@@ -1,452 +1,245 @@
 #include "material.h"
 
-void Material::init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* in) {
-    if (pos.kernel.dimention != 3)ERROR_STRING(dimention is not 3);
-    if (normal.kernel.dimention != 3)ERROR_STRING(dimention is not 3);
-    mtr.kernel.width = rast.kernel.width;
-    mtr.kernel.height = rast.kernel.height;
-    mtr.kernel.depth = rast.kernel.depth;
-    mtr.kernel.channel = channel;
-    mtr.kernel.pos = pos.kernel.out;
-    mtr.kernel.normal = normal.kernel.out;
-    mtr.kernel.texel = texel->vbo;
-    mtr.kernel.posidx = pos.vao;
-    mtr.kernel.normalidx = normal.vao;
-    mtr.kernel.texelidx = texel->vao;
-    mtr.kernel.rast = rast.kernel.out;
-    mtr.kernel.diffusemap = in;
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.out, mtr.Size()));
+void NormalAxis::init(NormalAxisParams& norm, RotationParams& rot, RasterizeParams& rast, Attribute& normal) {
+    norm.kernel.width = rast.kernel.width;
+    norm.kernel.height = rast.kernel.height;
+    norm.kernel.depth = rast.kernel.depth;
+    norm.kernel.rast = rast.kernel.out;
+    norm.kernel.rot = rot.kernel.out;
+    norm.kernel.normal = normal.vbo;
+    norm.kernel.normalidx = normal.vao;
+    CUDA_ERROR_CHECK(cudaMalloc(&norm.kernel.out, norm.Size()));
 }
 
-void Material::init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* diffusemap, float* roughnessmap, float* normalmap, float* heightmap) {
-    if (pos.kernel.dimention != 3)ERROR_STRING(dimention is not 3);
-    if (normal.kernel.dimention != 3)ERROR_STRING(dimention is not 3);
-    mtr.kernel.width = rast.kernel.width;
-    mtr.kernel.height = rast.kernel.height;
-    mtr.kernel.depth = rast.kernel.depth;
-    mtr.kernel.channel = channel;
-    mtr.kernel.pos = pos.kernel.out;
-    mtr.kernel.normal = normal.kernel.out;
-    mtr.kernel.texel = texel->vbo;
-    mtr.kernel.posidx = pos.vao;
-    mtr.kernel.normalidx = normal.vao;
-    mtr.kernel.texelidx = texel->vao;
-    mtr.kernel.rast = rast.kernel.out;
-    mtr.kernel.diffusemap = diffusemap;
-    mtr.kernel.roughnessmap = roughnessmap;
-    mtr.kernel.normalmap = normalmap;
-    mtr.kernel.heightmap = heightmap;
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.kernel.out, mtr.Size()));
+void NormalAxis::init(NormalAxisParams& norm, RotationParams& rot, RasterizeParams& rast, Attribute& normal, Attribute& pos, Attribute& texel, TexturemapParams& normalmap) {
+    init(norm, rot, rast, normal);
+    if (pos.dimention != 3)ERROR_STRING(dimention is not 3);
+    norm.kernel.pos = pos.vbo;
+    norm.kernel.posidx = pos.vao;
+    norm.kernel.texel = texel.vbo;
+    norm.kernel.texelidx = texel.vao;
+	if (normalmap.kernel.channel != 3)ERROR_STRING(dimention is not 3);
+	norm.kernel.normalmap = normalmap.kernel.out;
 }
 
-void Material::init(MaterialParams& mtr, float3 eye, Buffer& point, Buffer& intensity) {
-    mtr.kernel.eye = eye;
-    mtr.kernel.lightNum = point.num;
-    mtr.kernel.point = point.buffer;
-    mtr.kernel.intensity = intensity.buffer;
-}
-
-void Material::init(MaterialParams& mtr, Buffer& params) {
-    mtr.kernel.params = params.buffer;;
-}
-
-void Material::init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* in, float* grad) {
-    init((MaterialParams&)mtr, rast, pos, normal, texel, channel, in);
-    mtr.grad.diffusemap = grad;
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.out, mtr.Size()));
-}
-
-void Material::init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* diffusemap, float* roughnessmap, float* normalmap, float* heightmap, float* graddiffuse, float* gradroughness, float* gradnormal, float* gradheight) {
-    init((MaterialParams&)mtr, rast, pos, normal, texel, channel, diffusemap, roughnessmap, normalmap, heightmap);
-    mtr.grad.diffusemap = graddiffuse;
-    mtr.grad.roughnessmap = gradroughness;
-    mtr.grad.normalmap = gradnormal;
-    mtr.grad.heightmap = gradheight;
-    CUDA_ERROR_CHECK(cudaMalloc(&mtr.grad.out, mtr.Size()));
-}
-
-void Material::init(MaterialGradParams& mtr, float3 eye, BufferGrad& point, BufferGrad& intensity) {
-    Material::init((MaterialParams&)mtr, eye, point, intensity); 
-    mtr.grad.point = point.grad; 
-    mtr.grad.intensity = intensity.grad;
-}
-
-void Material::init(MaterialGradParams& mtr, BufferGrad& params) {
-    Material::init((MaterialParams&)mtr, params); 
-    mtr.grad.params = params.grad;
-}
-
-
-
-__global__ void PhongMaterialForwardKernel(const MaterialKernelParams mtr) {
+__global__ void NormalAxisForwardKernel(const NormalAxisKernelParams norm) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
     int pz = blockIdx.z;
-    if (px >= mtr.width || py >= mtr.height || pz >= mtr.depth)return;
-    int pidx = px + mtr.width * (py + mtr.height * pz);
+    if (px >= norm.width || py >= norm.height || pz >= norm.depth)return;
+    int pidx = px + norm.width * (py + norm.height * pz);
 
-    float4 r = ((float4*)mtr.rast)[pidx];
+    float4 r = ((float4*)norm.rast)[pidx];
     int idx = (int)r.w - 1;
     if (idx < 0) return;
 
-    float3 p2 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 2]];
-    float3 p0 = ((float3*)mtr.pos)[mtr.posidx[idx * 3]] - p2;
-    float3 p1 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 1]] - p2;
-    float3 n2 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 2]];
-    float3 n0 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3]] - n2;
-    float3 n1 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 1]] - n2;
-
-    float3 pos = p0 * r.x + p1 * r.y + p2;
-    float3 n = normalize(n0 * r.x + n1 * r.y + n2);
-    float3 v = normalize(*(float3*)&mtr.eye - pos);
-
-    float Ka = mtr.params[0];
-    float Kd = mtr.params[1];
-    float Ks = mtr.params[2];
-    float shininess = mtr.params[3];
-
-    for (int k = 0; k < mtr.channel; k++) {
-        mtr.out[pidx * mtr.channel + k] += mtr.diffusemap[pidx * mtr.channel + k] * Ka;
-    }
-    for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = ((float3*)mtr.point)[i] - pos;
-        float il2 = 1.f / dot(l, l);
-        l *= sqrt(il2);
-        float ln = dot(l, n);
-        float3 r = 2.f * ln * n - l;
-        float rv = dot(r, v);
-        float powrv = pow(max(rv, 0.f), shininess);
-        ln = max(ln, 0.f);
-        for (int k = 0; k < mtr.channel; k++) {
-            float intensity = mtr.intensity[i * mtr.channel + k] * il2;
-            float diffuse = intensity * ln;
-            float specular = intensity * powrv;
-            mtr.out[pidx * mtr.channel + k] += mtr.diffusemap[pidx * mtr.channel + k] * Kd * diffuse + Ks * specular;
-        }
-    }
-}
-
-void PhongMaterial::forward(MaterialParams& mtr) {
-    CUDA_ERROR_CHECK(cudaMemset(mtr.kernel.out, 0, mtr.Size()));
-    dim3 block = getBlock(mtr.kernel.width, mtr.kernel.height);
-    dim3 grid = getGrid(block, mtr.kernel.width, mtr.kernel.height, mtr.kernel.depth);
-    void* args[] = { &mtr.kernel };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(PhongMaterialForwardKernel, grid, block, args, 0, NULL));
-}
-
-
-void PhongMaterial::forward(MaterialGradParams& mtr) {
-    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.out, 0, mtr.Size()));
-    forward((MaterialParams&)mtr);
-}
-
-__global__ void PhongMaterialBackwardKernel(const MaterialKernelParams mtr, const MaterialKernelGradParams grad) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    int pz = blockIdx.z;
-    if (px >= mtr.width || py >= mtr.height || pz >= mtr.depth)return;
-    int pidx = px + mtr.width * (py + mtr.height * pz);
-
-    float4 r = ((float4*)mtr.rast)[pidx];
-    int idx = (int)r.w - 1;
-    if (idx < 0) return;
-
-    float3 p2 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 2]];
-    float3 p0 = ((float3*)mtr.pos)[mtr.posidx[idx * 3]] - p2;
-    float3 p1 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 1]] - p2;
-    float3 n2 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 2]];
-    float3 n0 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3]] - n2;
-    float3 n1 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 1]] - n2;
-
-    float3 pos = p0 * r.x + p1 * r.y + p2;
-    float3 n = normalize(n0 * r.x + n1 * r.y + n2);
-    float3 v = normalize(mtr.eye - pos);
-
-    float Ka = mtr.params[0];
-    float Kd = mtr.params[1];
-    float Ks = mtr.params[2];
-
-    for (int k = 0; k < mtr.channel; k++) {
-        float dLdout = grad.out[pidx * mtr.channel + k];
-        float din = mtr.diffusemap[pidx * mtr.channel + k] * dLdout;
-        if(grad.params!=nullptr)atomicAdd(&grad.params[0], din);
-        if (grad.diffusemap != nullptr)grad.diffusemap[pidx * mtr.channel + k] += Ka * dLdout;
-    }
-    for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = ((float3*)mtr.point)[i] - pos;
-        float il2 = 1.f / dot(l, l);
-        l *= sqrt(il2);
-        float ln = dot(l, n);
-        float3 r = 2.f * ln * n - l;
-        float rv = dot(r, v);
-        float dkd = 0.f;
-        float dks = 0.f;
-        float powrv = pow(max(rv, 0.f), mtr.params[3]);
-        for (int k = 0; k < mtr.channel; k++) {
-            float dLdout = grad.out[pidx * mtr.channel + k];
-            float din = dLdout * mtr.intensity[i * mtr.channel + k] * il2;
-            float dln = ln * din;
-            if (grad.diffusemap != nullptr)grad.diffusemap[pidx * mtr.channel + k] += Kd * dln;
-            dkd += dln * mtr.diffusemap[pidx * mtr.channel + k];
-            dks += din;
-        }
-        if (grad.params != nullptr) {
-            atomicAdd(&grad.params[1], dkd);
-            dks *= powrv;
-            atomicAdd(&grad.params[2], dks);
-            atomicAdd(&grad.params[3], Ks * dks * log(max(rv, 1e-3)));
-        }
-    }
-}
-
-void PhongMaterial::backward(MaterialGradParams& mtr) {
-    dim3 block = getBlock(mtr.kernel.width, mtr.kernel.height);
-    dim3 grid = getGrid(block, mtr.kernel.width, mtr.kernel.height, mtr.kernel.depth);
-    void* args[] = { &mtr.kernel, &mtr.grad };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(PhongMaterialBackwardKernel, grid, block, args, 0, NULL));
-}
-
-
-
-
-//
-// Cook-Torrance GGX
-// 
-// n:normal
-// v=normalize(eye-pos)
-// l=normalize(light-pos)
-// h=normalize(v+l)
-// 
-// lh=dot(l,h)
-// g=sqrt(ior^2-1+lh^2)
-// dg/dlh=lh/g
-// dg/dior=ior/g
-// 
-// F0=((g-lh)/(g+lh))^2
-// F1=1+((lh*(g+lh)-1)/(lh*(g-lh)+1))^2
-// F=1/2*F0*F1
-// 
-// F'=1/2*(F0'*F1+F0*F1')
-// dF/dlh=1/2*4/g*((g-lh)/(g+lh)^3)*(lh^2-g^2)*F1+F0*4/g*(lh^2*ior^2+g^2)*((lh*(g+lh)-1)/(lh*(g-lh)+1)^3)
-// dF/dior=1/2*4/g*ior*lh*((g-lh)/(g+lh)^3)*F1+F0*4/g*lh*ior*(1-lh^2)*((lh*(g+lh)-1)/(lh*(g-lh)+1)^3)
-// 
-// m=roughness^2
-// nh=dot(n,h)
-// D=m/pi/(nh^2*(m-1)+1)^2
-// dD/dnh=-4*m*(m-1)*nh/pi/(nh^2*(m-1)+1)^3
-// dD/droughness=2*roughness*(1-nh^2*(m+1))/pi/(nh^2*(m-1)+1)^3
-// 
-// nv=dot(n,v)
-// Vv=1/(nv+sqrt(nv^2+m*(1-nv^2)))
-// dVv/dnv=-(sqrt(nv^2+m*(1-nv^2))+nv*(1-m))/sqrt(nv^2*(1-m)+m)/(nv+sqrt(nv^2+m*(1-nv^2)))^2
-// dVv/droughness=-2*roughness*(1-nv^2)/sqrt(nv^2+m*(1-nv^2))/(nv+sqrt(nv^2+m*(1-nv^2)))^2
-// nl=dot(n,l)
-// Vl=1/(nl+sqrt(nl^2+m*(1-nl^2)))
-// dVl/dnl=-(sqrt(nl^2+m*(1-nl^2))+nl*(1-m))/sqrt(nl^2*(1-m)+m)/(nl+sqrt(nl^2+m*(1-nl^2)))^2
-// dVl/droughness=-2*roughness*(1-nl^2)/sqrt(nl^2+m*(1-nl^2))/(nl+sqrt(nl^2+m*(1-nl^2)))^2
-// V=Vv*Vl
-// dV/dn=Vv*dVl/dnl*l+Vl*dVv/dnv*v
-// dV/dv=Vl*dVv/dnv*n
-// dV/dl=Vv*dVl/dnl*n
-// dV/droughness=Vv*dVl/droughness+Vl*dVv/droughness
-// 
-// specular=F*D*Vv*Vl
-// diffuse=nl/pi
-// ddiffuse/dl=n/pi
-// ddiffuse/dn=l/pi
-// out=intensity*(in*diffuse+specular)
-// dL/dspecular=dL/dout*intensity
-// dL/ddiffuse=dL/dout*intensity*in
-// dL/din=dL/dout*intensity*diffuse
-//
-
-__global__ void PBRMaterialForwardKernel(const MaterialKernelParams mtr) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    int pz = blockIdx.z;
-    if (px >= mtr.width || py >= mtr.height || pz >= mtr.depth)return;
-    int pidx = px + mtr.width * (py + mtr.height * pz);
-
-
-    float4 r = ((float4*)mtr.rast)[pidx];
-    int idx = (int)r.w - 1;
-    if (idx < 0) return;
-
-    float3 p2 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 2]];
-    float3 p0 = ((float3*)mtr.pos)[mtr.posidx[idx * 3]] - p2;
-    float3 p1 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 1]] - p2;
-    float3 n2 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 2]];
-    float3 n0 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3]] - n2;
-    float3 n1 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 1]] - n2;
-    float2 uv2 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3 + 2]];
-    float2 uv0 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3]] - uv2;
-    float2 uv1 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3 + 1]] - uv2;
-
-    float3 pos = p0 * r.x + p1 * r.y + p2;
+    float3 n2 = ((float3*)norm.normal)[norm.normalidx[idx * 3 + 2]];
+    float3 n0 = ((float3*)norm.normal)[norm.normalidx[idx * 3]] - n2;
+    float3 n1 = ((float3*)norm.normal)[norm.normalidx[idx * 3 + 1]] - n2;
     float3 N = normalize(n0 * r.x + n1 * r.y + n2);
-    float3 T = normalize(p0 * uv1.y - p1 * uv0.y);
-    float3 B = normalize(p1 * uv0.x - p0 * uv1.x);
-
-    float3 normal = ((float3*)mtr.normalmap)[pidx];
-    normal = T * normal.x + B * normal.y + N * normal.z;
-    float3 n = normalize(normal);
-    float3 v = normalize(mtr.eye - pos);
-
-    float m2 = mtr.roughnessmap[pidx] * mtr.roughnessmap[pidx];
-    float ior2 = mtr.params[0] * mtr.params[0] - 1.f;
-    float disp = mtr.heightmap[pidx];
-
-    float nv = max(dot(n, v), 1e-3);
-    float Vv = 1.f / (nv + sqrt(m2 + nv * nv * (1.f - m2)));
-    for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = normalize(mtr.point[i] - pos);
-        float3 h = normalize(l + v);
-        float lh = max(dot(l, h), 0.f);
-        float g = sqrt(ior2 + lh * lh);
-        float g_nlh = g - lh;
-        float g_plh = g + lh;
-        float F = (g_nlh / g_plh);
-        F *= F * .5f;
-        float F1 = (lh * g_plh - 1.f) / (lh * g_nlh + 1.f);
-        F *= (1.f + F1 * F1);
-        float nh = max(dot(n, h), 0.f);
-        float D = (nh * nh * (m2 - 1.f) + 1.f);
-        D = m2 / (D * D * 3.14159265f);
-        float nl = max(dot(n, l), 1e-3);
-        float Vl = 1.f / (nl + sqrt(m2 + nl * nl * (1.f - m2)));
-        float specular = D * Vl * Vv * F;
-        float diffuse = nl / 3.14159265f;
-        for (int k = 0; k < mtr.channel; k++) {
-            float intensity = mtr.intensity[i * mtr.channel + k];
-            mtr.out[pidx * mtr.channel + k] += intensity * (mtr.diffusemap[pidx * mtr.channel + k] * diffuse + specular);
-        }
+    if (norm.normalmap == nullptr) {
+        float3 normal = make_float3(
+            norm.rot[0] * N.x + norm.rot[4] * N.y + norm.rot[8] * N.z,
+            norm.rot[1] * N.x + norm.rot[5] * N.y + norm.rot[9] * N.z,
+            norm.rot[2] * N.x + norm.rot[6] * N.y + norm.rot[10] * N.z
+        );
+        ((float3*)norm.out)[pidx] = normal;
+        return;
     }
+
+    float2 uv2 = ((float2*)norm.texel)[norm.texelidx[idx * 3 + 2]];
+    float2 uv0 = ((float2*)norm.texel)[norm.texelidx[idx * 3]] - uv2;
+    float2 uv1 = ((float2*)norm.texel)[norm.texelidx[idx * 3 + 1]] - uv2;
+    float3 p2 = ((float3*)norm.pos)[norm.posidx[idx * 3 + 2]];
+    float3 p0 = ((float3*)norm.pos)[norm.posidx[idx * 3]] - p2;
+    float3 p1 = ((float3*)norm.pos)[norm.posidx[idx * 3 + 1]] - p2;
+
+    float3 T = p0 * uv1.y - p1 * uv0.y;
+    T = normalize(T - N * dot(N, T));
+    float3 B = p1 * uv0.x - p0 * uv1.x;
+    B = normalize(B - N * dot(N, B));
+
+    float3 normal = ((float3*)norm.normalmap)[pidx];
+    N = normalize(T * normal.x + B * normal.y + N * normal.z);
+    normal = make_float3(
+        norm.rot[0] * N.x + norm.rot[4] * N.y + norm.rot[8] * N.z,
+        norm.rot[1] * N.x + norm.rot[5] * N.y + norm.rot[9] * N.z,
+        norm.rot[2] * N.x + norm.rot[6] * N.y + norm.rot[10] * N.z
+    );
+    ((float3*)norm.out)[pidx] = normal;
 }
 
-void PBRMaterial::forward(MaterialParams& mtr) {
-    CUDA_ERROR_CHECK(cudaMemset(mtr.kernel.out, 0, mtr.Size()));
-    dim3 block = getBlock(mtr.kernel.width, mtr.kernel.height);
-    dim3 grid = getGrid(block, mtr.kernel.width, mtr.kernel.height, mtr.kernel.depth);
-    void* args[] = { &mtr.kernel };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(PBRMaterialForwardKernel, grid, block, args, 0, NULL));
+void NormalAxis::forward(NormalAxisParams& norm){
+	CUDA_ERROR_CHECK(cudaMemset(norm.kernel.out, 0, norm.Size()));
+	dim3 block = getBlock(norm.kernel.width, norm.kernel.height);
+	dim3 grid = getGrid(block, norm.kernel.width, norm.kernel.height, norm.kernel.depth);
+	void* args[] = { &norm.kernel };
+	CUDA_ERROR_CHECK(cudaLaunchKernel(NormalAxisForwardKernel, grid, block, args, 0, NULL));
 }
 
-void PBRMaterial::forward(MaterialGradParams& mtr) {
-    CUDA_ERROR_CHECK(cudaMemset(mtr.grad.out, 0, mtr.Size()));
-    forward((MaterialParams&)mtr);
+
+
+void ReflectAxis::init(ReflectAxisParams& ref, RotationParams& rot, CameraParams& cam, RasterizeParams& rast, Attribute& normal) {
+    ref.kernel.width = rast.kernel.width;
+    ref.kernel.height = rast.kernel.height;
+    ref.kernel.depth = rast.kernel.depth;
+    ref.kernel.rast = rast.kernel.out;
+    ref.kernel.normal = normal.vbo;
+    ref.kernel.normalidx = normal.vao;
+    ref.kernel.rot = rot.kernel.out;
+    ref.kernel.view = cam.kernel.view;
+    ref.kernel.projection = cam.kernel.projection;
+    CUDA_ERROR_CHECK(cudaMalloc(&ref.kernel.pvinv, 9 * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMalloc(&ref.kernel.out, ref.Size()));
 }
 
-__global__ void PBRMaterialBackwardKernel(const MaterialKernelParams mtr, const MaterialKernelGradParams grad) {
+__global__ void ReflectAxisForwardKernel(const ReflectAxisKernelParams ref) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
     int pz = blockIdx.z;
-    if (px >= mtr.width || py >= mtr.height || pz >= mtr.depth)return;
-    int pidx = px + mtr.width * (py + mtr.height * pz);
+    if (px >= ref.width || py >= ref.height || pz >= ref.depth)return;
+    int pidx = px + ref.width * (py + ref.height * pz);
 
-    float4 r = ((float4*)mtr.rast)[pidx];
+    float2 screenpos = make_float2(
+        (float)px / (float)ref.width * 2.f - 1.f,
+        (float)py / (float)ref.height * 2.f - 1.f
+    );
+
+    float3 d = -normalize(
+        ((float3*)ref.pvinv)[0] * screenpos.x
+        + ((float3*)ref.pvinv)[1] * screenpos.y
+        + ((float3*)ref.pvinv)[2]);
+
+    float4 r = ((float4*)ref.rast)[pidx];
     int idx = (int)r.w - 1;
-    if (idx < 0) return;
-
-    float3 p2 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 2]];
-    float3 p0 = ((float3*)mtr.pos)[mtr.posidx[idx * 3]] - p2;
-    float3 p1 = ((float3*)mtr.pos)[mtr.posidx[idx * 3 + 1]] - p2;
-    float3 n2 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 2]];
-    float3 n0 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3]] - n2;
-    float3 n1 = ((float3*)mtr.normal)[mtr.normalidx[idx * 3 + 1]] - n2;
-    float2 uv2 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3 + 2]];
-    float2 uv0 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3]] - uv2;
-    float2 uv1 = ((float2*)mtr.texel)[mtr.texelidx[idx * 3 + 1]] - uv2;
-
-    float3 pos = p0 * r.x + p1 * r.y + p2;
-    float3 N = normalize(n0 * r.x + n1 * r.y + n2);
-    float3 T = normalize(p0 * uv1.y - p1 * uv0.y);
-    float3 B = normalize(p1 * uv0.x - p0 * uv1.x);
-
-    float3 normal = ((float3*)mtr.normalmap)[pidx];
-    normal = T * normal.x + B * normal.y + N * normal.z;
-    float in = 1.f / length(normal);
-    float3 n = normal * in;
-    float3 v = normalize(mtr.eye - pos);
-
-    float m2 = mtr.roughnessmap[pidx] * mtr.roughnessmap[pidx];
-    float m2_1 = 1.f - m2;
-    float ior2 = mtr.params[0] * mtr.params[0];
-
-    float nv = max(dot(n, v), 1e-3);
-    float v2 = nv * nv;
-    float k = sqrt(m2 + v2 * (1.f - m2));
-    float Vv = 1.f / (nv + k);
-    float kv = Vv * Vv / k;
-    float dVvdnv = -(k + nv * m2_1) * kv;
-    kv *= (v2 - 1.f);
-    float3 dLdn = make_float3(0.f, 0.f, 0.f);
-    for (int i = 0; i < mtr.lightNum; i++) {
-        float3 l = normalize(mtr.point[i] - pos);
-        float3 h = normalize(l + v);
-
-        float nh = max(dot(n, h), 0.f);
-        v2 = nh * nh;
-        k = 1.f / (1.f - v2 * m2_1);
-        float kD = k * k / 3.14159265f;
-        float D = m2 * kD;
-        kD *= k;
-        float dDdnh = 4.f * m2_1 * m2 * nh * kD;
-        kD *= (1.f - v2 * (m2 + 1.f));
-
-        float nl = max(dot(n, l), 1e-3);
-        v2 = nl * nl;
-        k = sqrt(m2 + v2 * (1.f - m2));
-        float Vl = 1.f / (nl + k);
-        float kl = Vl * Vl / k;
-        float dVldnl = -(k + nl * m2_1) * kl;
-        kl *= (v2 - 1.f);
-
-        float3 dVdn = dVvdnv * v * Vl + dVldnl * l * Vv;
-        float V = Vv * Vl;
-
-        float lh = max(dot(l, h), 0.f);
-        v2 = lh * lh;
-        float g2 = ior2 - 1.f + v2;
-        float g = sqrt(g2);
-        float g_plh = g + lh;
-        float kF0 = (g - lh) / g_plh;
-        float F0 = kF0 * kF0;
-        kF0 /= (g_plh * g_plh);
-        float g_nlh_1 = lh * (g - lh) + 1.f;
-        float kF1 = (lh * g_plh - 1.f) / g_nlh_1;
-        float F1 = 1.f + kF1 * kF1;
-        float F = .5f * F0 * F1;
-        k = 2.f / g;
-        float dFdlh = k * (kF0 * (v2 - g2) * F1 + kF1 * (v2 * ior2 + g2) * F0);
-
-        grad.params[0] += k * mtr.params[0] * lh * (kF0 * F1 + kF1 * (1.f - v2) * F0) * D * V;
-
-        float specular = nl * D * Vl * Vv * F;
-        float diffuse = nl / 3.14159265f;
-        k = kD * V + (kv * Vl + kl * Vv) * D;
-        for (int j = 0; j < mtr.channel; j++) {
-            float dLdout = grad.out[pidx * mtr.channel + j];
-            dLdout *= mtr.intensity[i * mtr.channel + j];
-            grad.diffusemap[pidx * mtr.channel + j] += dLdout * diffuse;
-            float dLddiffuse = dLdout * mtr.diffusemap[pidx * mtr.channel + j] / 3.14159265f;
-            grad.roughnessmap[pidx] += dLdout * k * 2.f * mtr.roughnessmap[pidx];
-            dLdn+= dLdout * F * (dDdnh * h * V + dVdn * D) + dLddiffuse * l;
-        }
-    }
-    dLdn = in * (dLdn - n * dot(n, dLdn));
-    dLdn = make_float3(dot(dLdn, T), dot(dLdn, B), dot(dLdn, N));
-    ((float3*)grad.normalmap)[pidx] += dLdn;
-}
-
-void PBRMaterial::backward(MaterialGradParams& mtr) {
-    dim3 block = getBlock(mtr.kernel.width, mtr.kernel.height);
-    dim3 grid = getGrid(block, mtr.kernel.width, mtr.kernel.height, mtr.kernel.depth);
-    if (mtr.kernel.width > mtr.kernel.height) {
-        block.x >>= 1; grid.x <<= 1;
+    if (idx < 0) {
+        ((float3*)ref.out)[pidx] = d;
     }
     else {
-        block.y >>= 1; grid.y <<= 1;
+        float3 n2 = ((float3*)ref.normal)[ref.normalidx[idx * 3 + 2]];
+        float3 n0 = ((float3*)ref.normal)[ref.normalidx[idx * 3]] - n2;
+        float3 n1 = ((float3*)ref.normal)[ref.normalidx[idx * 3 + 1]] - n2;
+        float3 N = normalize(n0 * r.x + n1 * r.y + n2);
+        float3 n = make_float3(
+            ref.rot[0] * N.x + ref.rot[4] * N.y + ref.rot[8] * N.z,
+            ref.rot[1] * N.x + ref.rot[5] * N.y + ref.rot[9] * N.z,
+            ref.rot[2] * N.x + ref.rot[6] * N.y + ref.rot[10] * N.z
+        );
+        float3 p = 2.f * dot(d, n) * n - d;
+        ((float3*)ref.out)[pidx] = p;
     }
-    void* args[] = { &mtr.kernel, &mtr.grad };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(PBRMaterialBackwardKernel, grid, block, args, 0, NULL));
+
+}
+
+void ReflectAxis::forward(ReflectAxisParams& ref) {
+
+    glm::mat3 pvinv = glm::inverse(glm::mat3(*ref.kernel.projection) * glm::mat3(*ref.kernel.view));
+    CUDA_ERROR_CHECK(cudaMemcpy(ref.kernel.pvinv, &pvinv, 9 * sizeof(float), cudaMemcpyHostToDevice));
+
+    dim3 block = getBlock(ref.kernel.width, ref.kernel.height);
+    dim3 grid = getGrid(block, ref.kernel.width, ref.kernel.height, ref.kernel.depth);
+    void* args[] = { &ref.kernel};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(ReflectAxisForwardKernel, grid, block, args, 0, NULL));
+}
+
+
+
+void SphericalGaussian::init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ReflectAxisParams& reflect, TexturemapParams& diffuse, TexturemapParams& roughness, SGBuffer& sgbuf, float ior) {
+    sg.kernel.width = rast.kernel.width;
+    sg.kernel.height = rast.kernel.height;
+    sg.kernel.depth = rast.kernel.depth;
+    sg.kernel.channel = sgbuf.channel;
+
+    sg.kernel.rast = rast.kernel.out;
+
+    sg.kernel.normal = normal.kernel.out;
+    sg.kernel.reflect = reflect.kernel.out;
+    sg.kernel.diffuse = diffuse.kernel.out;
+    sg.kernel.roughness = roughness.kernel.out;
+    sg.kernel.ior = ior;
+
+    sg.kernel.sgnum = sgbuf.num;
+    sg.kernel.axis = sgbuf.axis;
+    sg.kernel.sharpness = sgbuf.sharpness;
+    sg.kernel.amplitude = sgbuf.amplitude;
+
+    CUDA_ERROR_CHECK(cudaMalloc(&sg.kernel.out, sg.Size()));
+    CUDA_ERROR_CHECK(cudaMalloc(&sg.kernel.outDiffenv, sg.Size()));
+    CUDA_ERROR_CHECK(cudaMalloc(&sg.kernel.outSpecenv, sg.Size()));
+}
+
+
+__global__ void SGForwardKernel(const SphericalGaussianKernelParams sg) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= sg.width || py >= sg.height || pz >= sg.depth)return;
+    int pidx = px + sg.width * (py + sg.height * pz);
+
+    float3 p = ((float3*)sg.reflect)[pidx];
+
+    float4 r = ((float4*)sg.rast)[pidx];
+    int idx = (int)r.w - 1;
+    if (idx < 0) {
+        for (int i = 0; i < sg.sgnum; i++) {
+            float3 sgaxis = ((float3*)sg.axis)[i];
+            float sgsharpness = sg.sharpness[i];
+            float sgvalue = exp(sgsharpness * (dot(p, sgaxis) - 1.f));
+            for (int k = 0; k < sg.channel; k++) {
+                AddNaNcheck(sg.out[pidx * sg.channel + k], sg.amplitude[i * sg.channel + k] * sgvalue);
+            }
+        }
+        return;
+    }
+
+    float diffsharpness = 2.f;
+    float diffamplitude = .32424871f; //=1/(pi*(1-exp(-4))
+
+    float3 n = ((float3*)sg.normal)[pidx];
+    float3 diffn = n * diffsharpness;
+
+    float pn = abs(dot(p, n));
+    float m = sg.roughness[pidx];
+    float specsharpness = .5f / max(m * m * pn, 1e-6);
+    float3 specn = p * specsharpness;
+
+    float g = sqrt(sg.ior * sg.ior - 1.f + pn * pn);
+    float g_pls_dn = g + pn;
+    float g_mns_dn = g - pn;
+    float f0 = g_mns_dn / g_pls_dn;
+    float f1 = (pn * g_pls_dn - 1.f) / (pn * g_mns_dn + 1.f);
+    float F = .5f * f0 * f0 * (1.f + f1 * f1);
+
+    float pn2 = pn * pn;
+    float G = 1.f / (pn + sqrt(pn2 + m * m * (1.f - pn2)));
+
+    float specamplitude = F * G * G;
+
+    for (int i = 0; i < sg.sgnum; i++) {
+        float sgsharpness = sg.sharpness[i];
+        float3 sgn = ((float3*)sg.axis)[i] * sgsharpness;
+        float diffl = length(diffn + sgn);
+        float specl = length(specn + sgn);
+        for (int k = 0; k < sg.channel; k++) {
+            float sgamplitude = sg.amplitude[i * sg.channel + k];
+            AddNaNcheck(sg.outDiffenv[pidx * sg.channel + k], (exp(diffl - sgsharpness - diffsharpness) - exp(-diffl - sgsharpness - diffsharpness)) / max(diffl, 1e-6) * sgamplitude * diffamplitude * 6.2831853f);
+            AddNaNcheck(sg.outSpecenv[pidx * sg.channel + k], (exp(specl - sgsharpness - specsharpness) - exp(-specl - sgsharpness - specsharpness)) / max(specl, 1e-6) * sgamplitude * specamplitude * 6.2831853f);
+        }
+    }
+
+    for (int k = 0; k < sg.channel; k++) {
+        int idx = pidx * sg.channel + k;
+        sg.out[idx] = sg.diffuse[idx] * sg.outDiffenv[idx] + sg.outSpecenv[idx];
+    }
+}
+
+void SphericalGaussian::forward(SphericalGaussianParams& sg) {
+    CUDA_ERROR_CHECK(cudaMemset(sg.kernel.out, 0, sg.Size()));
+    CUDA_ERROR_CHECK(cudaMemset(sg.kernel.outDiffenv, 0, sg.Size()));
+    CUDA_ERROR_CHECK(cudaMemset(sg.kernel.outSpecenv, 0, sg.Size()));
+
+    dim3 block = getBlock(sg.kernel.width, sg.kernel.height);
+    dim3 grid = getGrid(block, sg.kernel.width, sg.kernel.height, sg.kernel.depth);
+    void* args[] = { &sg.kernel};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(SGForwardKernel, grid, block, args, 0, NULL));
 }

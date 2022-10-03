@@ -35,3 +35,8 @@ public:
 	static void backward(LossParams& loss);
 	static void textureloss(LossParams& loss);
 };
+
+class SSIMLoss : Loss {
+public:
+	static void backward(LossParams& loss);
+};

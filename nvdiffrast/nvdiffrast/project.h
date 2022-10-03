@@ -3,25 +3,26 @@
 #include "buffer.h"
 
 struct ProjectKernelParams {
-	int vboNum;
+	int vecNum;
 	int dimention;
-	float* vbo;
+	float* vec;
 	float* mat;
 
 	float* out;
 };
 
 struct ProjectKernelGradParams {
-	float* out;
+	float* vec;
+	float* mat;
 
-	float* vbo;
+	float* out;
 };
 
 struct ProjectParams{
 	ProjectKernelParams kernel;
 	unsigned int* vao;
 	int vaoNum;
-	size_t vboSize() { return (size_t)kernel.vboNum * kernel.dimention * sizeof(float); };
+	size_t vecSize() { return (size_t)kernel.vecNum * kernel.dimention * sizeof(float); };
 	size_t vaoSize() { return (size_t)vaoNum * 3 * sizeof(unsigned int); };
 };
 
@@ -34,6 +35,8 @@ public:
 	static void init(ProjectParams& proj, float* mat, Attribute& vec, bool homogeneous);
 	static void init(ProjectParams& proj, float* mat, Attribute& vec, Attribute& out, bool homogeneous);
 	static void init(ProjectGradParams& proj, float* mat, AttributeGrad& vec, bool homogeneous);
+	static void init(ProjectGradParams& proj, float* mat, float* grad, AttributeGrad& vec, bool homogeneous);
+	static void init(ProjectGradParams& proj, float* mat, float* grad, Attribute& vec, bool homogeneous);
 	static void init(ProjectGradParams& proj, float* mat, AttributeGrad& vec, AttributeGrad& out, bool homogeneous);
 	static void forward(ProjectParams& proj);
 	static void forward(ProjectGradParams& proj);

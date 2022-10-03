@@ -1,86 +1,147 @@
 #pragma once
 #include "common.h"
 #include "buffer.h"
+#include "matrix.h"
 #include "rasterize.h"
 #include "interpolate.h"
+#include "texturemap.h"
 
-struct MaterialKernelParams {
+struct NormalAxisKernelParams {
+	int width;
+	int height;
+	int depth;
+	float* rast;
+
+	float* rot;
+	float* normal;
+	unsigned int* normalidx;
+	float* pos;
+	unsigned int* posidx;
+	float* texel;
+	unsigned int* texelidx;
+	float* normalmap;
+	
+	float* out;
+};
+
+struct NormalAxisGradKernelParams {
+	float* normal;
+	float* normalmap;
+
+	float* out;
+};
+
+struct NormalAxisParams {
+	NormalAxisKernelParams kernel;
+	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * 3 * sizeof(float); };
+};
+
+struct NormalAxisGradParams : NormalAxisParams {
+	NormalAxisGradKernelParams grad;
+};
+
+class NormalAxis {
+public:
+	static void init(NormalAxisParams& norm, RotationParams& rot, RasterizeParams& rast, Attribute& normal);
+	static void init(NormalAxisParams& norm, RotationParams& rot, RasterizeParams& rast, Attribute& normal, Attribute& pos, Attribute& texel, TexturemapParams& normalmap);
+	static void forward(NormalAxisParams& norm);
+};
+
+
+
+struct ReflectAxisKernelParams{
+	int width;
+	int height;
+	int depth;
+
+	float* rast;
+	float* normal;
+	unsigned int* normalidx;
+
+	float* rot;
+	glm::mat4* view;
+	glm::mat4* projection;
+	float* pvinv;
+
+	float* out;
+};
+
+struct ReflectAxisGradKernelParams{
+	float* rast;
+	float* normal;
+
+	glm::mat4* view;
+	glm::mat4* projection;
+
+	float* out;
+};
+
+struct ReflectAxisParams {
+	ReflectAxisKernelParams kernel;
+	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * 3 * sizeof(float); };
+};
+
+struct ReflectAxisGradParams : ReflectAxisParams {
+	ReflectAxisGradKernelParams grad;
+};
+
+class ReflectAxis {
+public:
+	static void init(ReflectAxisParams& ref, RotationParams& rot, CameraParams& cam, RasterizeParams& rast, Attribute& normal);
+	static void forward(ReflectAxisParams& ref);
+};
+
+
+
+struct SphericalGaussianKernelParams {
 	int width;
 	int height;
 	int depth;
 	int channel;
-	float* pos;
-	float* normal;
-	float* texel;
-	unsigned int* posidx;
-	unsigned int* normalidx;
-	unsigned int* texelidx;
+
 	float* rast;
-	float* diffusemap;
-	float* roughnessmap;
-	float* normalmap;
-	float* heightmap;
 
-	float* out;
-
-	float3 eye;
-	int lightNum;
-	float* point;
-	float* intensity;
-	float* params;
-};
-
-struct MaterialKernelGradParams {
-	float* out;
-
-	float* pos;
 	float* normal;
-	float* texel;
-	float* diffusemap;
-	float* roughnessmap;
-	float* normalmap;
-	float* heightmap;
-	float* point;
-	float* intensity;
-	float* params;
+	float* reflect;
+	float* diffuse;
+	float* roughness;
+	float ior;
+
+	int sgnum;
+	float* axis;
+	float* sharpness;
+	float* amplitude;
+
+	float* out;
+	float* outDiffenv;
+	float* outSpecenv;
 };
 
-struct MaterialParams {
-	MaterialKernelParams kernel;
+struct SphericalGaussianGradKernelParams {
+	float* normal;
+	float* reflect;
+	float* diffuse;
+	float* roughness;
+	float ior;
+
+	float* axis;
+	float* sharpness;
+	float* amplitude;
+
+	float* out;
+};
+
+struct SphericalGaussianParams {
+	SphericalGaussianKernelParams kernel;
 	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * kernel.channel * sizeof(float); };
 };
 
-struct MaterialGradParams : MaterialParams {
-	MaterialKernelGradParams grad;
+struct SphericalGaussianGradParams : SphericalGaussianParams{
+	SphericalGaussianGradKernelParams grad;
 };
 
-class Material {
+class SphericalGaussian {
 public:
-	static void init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* in);
-	static void init(MaterialParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* diffusemap, float* roughnessmap, float* normalmap, float* heightmap);
-	static void init(MaterialParams& mtr, float3 eye, Buffer& point, Buffer& intensity);
-	static void init(MaterialParams& mtr, Buffer& params);
-	static void init(MaterialGradParams& mtr, float3 eye, BufferGrad& point, BufferGrad& intensity);
-	static void init(MaterialGradParams& mtr, BufferGrad& params);
-	static void init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* in, float* grad);
-	static void init(MaterialGradParams& mtr, RasterizeParams& rast, ProjectParams& pos, ProjectParams& normal, Attribute* texel, int channel, float* diffusemap, float* roughnessmap, float* normalmap, float* heightmap, float* graddiffuse, float* gradroughness, float* gradnormal, float* gradheight);
+	static void init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ReflectAxisParams& reflect, TexturemapParams& diffuse, TexturemapParams& roughness, SGBuffer& sgbuf, float ior);
+	static void forward(SphericalGaussianParams& sg);
 };
-
-
-
-class PhongMaterial :Material {
-public:
-	static void forward(MaterialParams& mtr);
-	static void forward(MaterialGradParams& mtr);
-	static void backward(MaterialGradParams& mtr);
-};
-
-
-
-class PBRMaterial :Material {
-public:
-	static void forward(MaterialParams& mtr);
-	static void forward(MaterialGradParams& mtr);
-	static void backward(MaterialGradParams& mtr);
-};
-

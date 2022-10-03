@@ -14,6 +14,8 @@
 #include <math.h>
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <vector>
 #include <stdio.h>
 #include <string>
@@ -90,6 +92,54 @@ static __device__ __forceinline__ float4    operator*   (float a, const float4& 
 static __device__ __forceinline__ float4    operator+   (float a, const float4& b) { return make_float4(a + b.x, a + b.y, a + b.z, a + b.w); }
 static __device__ __forceinline__ float4    operator-   (float a, const float4& b) { return make_float4(a - b.x, a - b.y, a - b.z, a - b.w); }
 
+static __device__ __forceinline__ double2& operator*=  (double2& a, const double2& b) { a.x *= b.x; a.y *= b.y; return a; }
+static __device__ __forceinline__ double2& operator+=  (double2& a, const double2& b) { a.x += b.x; a.y += b.y; return a; }
+static __device__ __forceinline__ double2& operator-=  (double2& a, const double2& b) { a.x -= b.x; a.y -= b.y; return a; }
+static __device__ __forceinline__ double2& operator*=  (double2& a, double b) { a.x *= b; a.y *= b; return a; }
+static __device__ __forceinline__ double2& operator+=  (double2& a, double b) { a.x += b; a.y += b; return a; }
+static __device__ __forceinline__ double2& operator-=  (double2& a, double b) { a.x -= b; a.y -= b; return a; }
+static __device__ __forceinline__ double2    operator*   (const double2& a, const double2& b) { return make_double2(a.x * b.x, a.y * b.y); }
+static __device__ __forceinline__ double2    operator+   (const double2& a, const double2& b) { return make_double2(a.x + b.x, a.y + b.y); }
+static __device__ __forceinline__ double2    operator-   (const double2& a, const double2& b) { return make_double2(a.x - b.x, a.y - b.y); }
+static __device__ __forceinline__ double2    operator*   (const double2& a, double b) { return make_double2(a.x * b, a.y * b); }
+static __device__ __forceinline__ double2    operator+   (const double2& a, double b) { return make_double2(a.x + b, a.y + b); }
+static __device__ __forceinline__ double2    operator-   (const double2& a, double b) { return make_double2(a.x - b, a.y - b); }
+static __device__ __forceinline__ double2    operator*   (double a, const double2& b) { return make_double2(a * b.x, a * b.y); }
+static __device__ __forceinline__ double2    operator+   (double a, const double2& b) { return make_double2(a + b.x, a + b.y); }
+static __device__ __forceinline__ double2    operator-   (double a, const double2& b) { return make_double2(a - b.x, a - b.y); }
+static __device__ __forceinline__ double2    operator-   (const double2& a) { return make_double2(-a.x, -a.y); }
+static __device__ __forceinline__ double3& operator*=  (double3& a, const double3& b) { a.x *= b.x; a.y *= b.y; a.z *= b.z; return a; }
+static __device__ __forceinline__ double3& operator+=  (double3& a, const double3& b) { a.x += b.x; a.y += b.y; a.z += b.z; return a; }
+static __device__ __forceinline__ double3& operator-=  (double3& a, const double3& b) { a.x -= b.x; a.y -= b.y; a.z -= b.z; return a; }
+static __device__ __forceinline__ double3& operator*=  (double3& a, double b) { a.x *= b; a.y *= b; a.z *= b; return a; }
+static __device__ __forceinline__ double3& operator+=  (double3& a, double b) { a.x += b; a.y += b; a.z += b; return a; }
+static __device__ __forceinline__ double3& operator-=  (double3& a, double b) { a.x -= b; a.y -= b; a.z -= b; return a; }
+static __device__ __forceinline__ double3    operator*   (const double3& a, const double3& b) { return make_double3(a.x * b.x, a.y * b.y, a.z * b.z); }
+static __device__ __forceinline__ double3    operator+   (const double3& a, const double3& b) { return make_double3(a.x + b.x, a.y + b.y, a.z + b.z); }
+static __device__ __forceinline__ double3    operator-   (const double3& a, const double3& b) { return make_double3(a.x - b.x, a.y - b.y, a.z - b.z); }
+static __device__ __forceinline__ double3    operator*   (const double3& a, double b) { return make_double3(a.x * b, a.y * b, a.z * b); }
+static __device__ __forceinline__ double3    operator+   (const double3& a, double b) { return make_double3(a.x + b, a.y + b, a.z + b); }
+static __device__ __forceinline__ double3    operator-   (const double3& a, double b) { return make_double3(a.x - b, a.y - b, a.z - b); }
+static __device__ __forceinline__ double3    operator*   (double a, const double3& b) { return make_double3(a * b.x, a * b.y, a * b.z); }
+static __device__ __forceinline__ double3    operator+   (double a, const double3& b) { return make_double3(a + b.x, a + b.y, a + b.z); }
+static __device__ __forceinline__ double3    operator-   (double a, const double3& b) { return make_double3(a - b.x, a - b.y, a - b.z); }
+static __device__ __forceinline__ double3    operator-   (const double3& a) { return make_double3(-a.x, -a.y, -a.z); }
+static __device__ __forceinline__ double4& operator*=  (double4& a, const double4& b) { a.x *= b.x; a.y *= b.y; a.z *= b.z; a.w *= b.w; return a; }
+static __device__ __forceinline__ double4& operator+=  (double4& a, const double4& b) { a.x += b.x; a.y += b.y; a.z += b.z; a.w += b.w; return a; }
+static __device__ __forceinline__ double4& operator-=  (double4& a, const double4& b) { a.x -= b.x; a.y -= b.y; a.z -= b.z; a.w -= b.w; return a; }
+static __device__ __forceinline__ double4& operator*=  (double4& a, double b) { a.x *= b; a.y *= b; a.z *= b; a.w *= b; return a; }
+static __device__ __forceinline__ double4& operator+=  (double4& a, double b) { a.x += b; a.y += b; a.z += b; a.w += b; return a; }
+static __device__ __forceinline__ double4& operator-=  (double4& a, double b) { a.x -= b; a.y -= b; a.z -= b; a.w -= b; return a; }
+static __device__ __forceinline__ double4    operator*   (const double4& a, const double4& b) { return make_double4(a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w); }
+static __device__ __forceinline__ double4    operator+   (const double4& a, const double4& b) { return make_double4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w); }
+static __device__ __forceinline__ double4    operator-   (const double4& a, const double4& b) { return make_double4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w); }
+static __device__ __forceinline__ double4    operator*   (const double4& a, double b) { return make_double4(a.x * b, a.y * b, a.z * b, a.w * b); }
+static __device__ __forceinline__ double4    operator+   (const double4& a, double b) { return make_double4(a.x + b, a.y + b, a.z + b, a.w + b); }
+static __device__ __forceinline__ double4    operator-   (const double4& a, double b) { return make_double4(a.x - b, a.y - b, a.z - b, a.w - b); }
+static __device__ __forceinline__ double4    operator*   (double a, const double4& b) { return make_double4(a * b.x, a * b.y, a * b.z, a * b.w); }
+static __device__ __forceinline__ double4    operator+   (double a, const double4& b) { return make_double4(a + b.x, a + b.y, a + b.z, a + b.w); }
+static __device__ __forceinline__ double4    operator-   (double a, const double4& b) { return make_double4(a - b.x, a - b.y, a - b.z, a - b.w); }
+
 static __device__ __forceinline__ float dot(float2 a, float2 b) { return a.x * b.x + a.y * b.y; }
 static __device__ __forceinline__ float dot(float3 a, float3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 static __device__ __forceinline__ float dot(float4 a, float4 b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
@@ -127,6 +177,16 @@ static __device__ __forceinline__ void atomicAdd_xyw(float* ptr, float x, float 
 	atomicAdd(ptr + 3, w);
 }
 static __device__ __forceinline__ void AddNaNcheck(float& a, float b) { if (!isfinite(a))a = 0.f; else { float v = a + b; if (isfinite(v))a = v; } };
+
+static __device__ __forceinline__ double dot(double2 a, double2 b) { return a.x * b.x + a.y * b.y; }
+static __device__ __forceinline__ double dot(double3 a, double3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+static __device__ __forceinline__ double dot(double4 a, double4 b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
+static __device__ __forceinline__ double length(double2 v) { return sqrt(dot(v, v)); }
+static __device__ __forceinline__ double length(double3 v) { return sqrt(dot(v, v)); }
+static __device__ __forceinline__ double length(double4 v) { return sqrt(dot(v, v)); }
+static __device__ __forceinline__ double2 normalize(double2 v) { double d = 1.f / length(v); v.x *= d; v.y *= d; return v; }
+static __device__ __forceinline__ double3 normalize(double3 v) { double d = 1.f / length(v); v.x *= d; v.y *= d; v.z *= d; return v; }
+static __device__ __forceinline__ double4 normalize(double4 v) { double d = 1.f / length(v); v.x *= d; v.y *= d; v.z *= d; v.w *= d; return v; }
 
 static __device__ __forceinline__ float getUniform(unsigned int a, unsigned  int b, unsigned int c)
 {

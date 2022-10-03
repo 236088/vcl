@@ -16,6 +16,7 @@ struct Buffer {
 	static void liner(Buffer& buf, float w, float b);
 	static void addRandom(Buffer& buf, float min, float max);
 	static void clamp(Buffer& buf, float min, float max);
+	static void normalize(Buffer& buf);
 };
 
 struct BufferGrad :Buffer {
@@ -74,4 +75,39 @@ struct TextureGrad : Texture {
 	static void init(TextureGrad& texture, int width, int height, int channel, int miplevel);
 	static void clear(TextureGrad& texture);
 	static void gradSumup(TextureGrad& texture);
+};
+
+
+
+struct SGBuffer {
+	float* axis;
+	float* sharpness;
+	float* amplitude;
+	int num;
+	int channel;
+	static void init(SGBuffer& sgbuf, int num, int channel);
+	static void copy(SGBuffer& dst, float* axis, float* sharpness, float* amplitude);
+	static void randomize(SGBuffer& sgbuf);
+	static void bake(SGBuffer& sgbuf, Texture& texture);
+};
+
+struct SGBufferGrad :SGBuffer {
+	float* axis;
+	float* sharpness;
+	float* amplitude;
+};
+
+
+
+struct GLbuffer {
+	GLuint id;
+	float* gl_buffer;
+	float* buffer;
+	int width;
+	int height;
+	int channel;
+	size_t Size() { return (size_t)width * height * channel * sizeof(float); };
+	static void init(GLbuffer& rb, float* buffer, int width, int height, int channel);
+	static void draw(GLbuffer& rb, GLint internalformat, GLenum format, float minX, float minY, float maxX, float maxY);
+	static void draw(GLbuffer& rb, GLint internalformat, GLenum format, float texminX, float texminY, float texmaxX, float texmaxY, float minX, float minY, float maxX, float maxY);
 };

@@ -1,5 +1,103 @@
 #include "buffer.h"
 
+__global__ void setValueKernel(float* dst, int width, int height, int dimention, float* color) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * py;
+
+    for (int i = 0; i < dimention; i++) {
+        dst[pidx * dimention + i] = color[i];
+    }
+}
+
+__global__ void randomKernel(float* dst, float min, float max, int width, int height, int dimention, unsigned int seed) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height || pz >= dimention)return;
+    int pidx = px + width * (py + height * pz);
+    dst[pidx] += min + (max - min) * getUniform(pidx, seed, 0xba5ec0de);
+}
+
+__global__ void sphericalRandomKernel(float* dst, int width, int height, unsigned int seed) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * py;
+
+    float theta = (getUniform(pidx, seed, 0xba5eba11) * 2.f - 1.f) * 3.14159265f;
+    float z = getUniform(pidx, seed, 0xdeadba11) * 2.f - 1.f;
+    float c = sqrt(1.f - z * z);
+
+    dst[pidx * 3] = c * cos(theta);
+    dst[pidx * 3 + 1] = c * sin(theta);
+    dst[pidx * 3 + 2] = z;
+}
+
+__global__ void linerKernel(float* dst, float* src, float w, float b, int width, int height, int dimention) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height || pz >= dimention)return;
+    int pidx = px + width * (py + height * pz);
+    dst[pidx] = src[pidx] * w + b;
+}
+
+__global__ void powexpKernel(float* dst, float* src, float c, float base, int width, int height, int dimention) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height || pz >= dimention)return;
+    int pidx = px + width * (py + height * pz);
+    dst[pidx] = c * pow(base, src[pidx]);
+}
+
+__global__ void powbaseKernel(float* dst, float* src, float c, float exp, int width, int height, int dimention) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height || pz >= dimention)return;
+    int pidx = px + width * (py + height * pz);
+    dst[pidx] = c * pow(src[pidx], exp);
+}
+
+__global__ void clampKernel(float* dst, float* src, float min, float max, int width, int height, int dimention) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height || pz >= dimention)return;
+    int pidx = px + width * (py + height * pz);
+    dst[pidx] = clamp(src[pidx], min, max);
+}
+
+__global__ void stepKernel(float* dst, float* src, float threshold, int width, int height, int dimention) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height || pz >= dimention)return;
+    int pidx = px + width * (py + height * pz);
+    dst[pidx] = src[pidx] < threshold ? 0.f : 1.f;
+}
+
+__global__ void normalizeKernel(float* dst, float* src, int width, int height, int dimention) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height)return;
+    int pidx = px + width * py;
+    float l2 = 0.f;
+    for (int i = 0; i < dimention; i++) {
+        l2 += src[pidx * dimention + i] * src[pidx * dimention + i];
+    }
+    if (l2 <= 0)return;
+    float il = 1.f / sqrt(l2);
+    for (int i = 0; i < dimention; i++) {
+        dst[pidx * dimention + i] *= il;
+    }
+}
+
+
+
 void Buffer::init(Buffer& buf, int num, int dimention) {
     buf.num = num;
     buf.dimention = dimention;
@@ -22,61 +120,42 @@ void Buffer::copy(float* dst, Buffer& src) {
     CUDA_ERROR_CHECK(cudaMemcpy(dst, src.buffer, src.Size(), cudaMemcpyDeviceToHost));
 }
 
-__global__ void BufferLinerKernel(float* buffer, float w, float b, int width, int height) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * py;
-    buffer[pidx] = buffer[pidx] * w + b;
-}
+
+
 
 void Buffer::liner(Buffer& buf, float w, float b) {
+    int dimention = 1;
     dim3 block = getBlock(buf.num, buf.dimention);
     dim3 grid = getGrid(block, buf.num, buf.dimention);
-    void* args[] = { &buf.buffer, &w,&b,&buf.num,&buf.dimention };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferLinerKernel, grid, block, args, 0, NULL));
-}
-
-__global__ void BufferRandomKernel(float* buffer, float min, float max, int width, int height, unsigned int seed) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * py;
-    buffer[pidx] += min + (max - min) * getUniform(pidx, seed, 0xba5ec0de);
+    void* args[] = { &buf.buffer, &buf.buffer, &w, &b, &buf.num, &buf.dimention, &dimention};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(linerKernel, grid, block, args, 0, NULL));
 }
 
 void Buffer::addRandom(Buffer& buf, float min, float max) {
+    int dimention = 1;
     unsigned int seed = rand();
     dim3 block = getBlock(buf.num, buf.dimention);
     dim3 grid = getGrid(block, buf.num, buf.dimention);
-    void* args[] = { &buf.buffer,&min,&max,&buf.num,&buf.dimention, &seed };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferRandomKernel, grid, block, args, 0, NULL));
-}
-
-__global__ void BufferClampKernel(float* buffer, float min, float max, int width, int height) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * py;
-    buffer[pidx] = clamp(buffer[pidx],min, max);
-}
-
-__global__ void BufferStepKernel(float* buffer, float threshold, int width, int height) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * py;
-    buffer[pidx] = buffer[pidx] < threshold ? 0.f : 1.f;
+    void* args[] = { &buf.buffer, &min, &max, &buf.num, &buf.dimention, &dimention, &seed };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, args, 0, NULL));
 }
 
 void Buffer::clamp(Buffer& buf, float min, float max) {
+    int dimention = 1;
     unsigned int seed = rand();
     dim3 block = getBlock(buf.num, buf.dimention);
     dim3 grid = getGrid(block, buf.num, buf.dimention);
-    void* args[] = { &buf.buffer,&min,&max,&buf.num,&buf.dimention };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferClampKernel, grid, block, args, 0, NULL));
+    void* args[] = {&buf.buffer, &buf.buffer, &min, &max, &buf.num, &buf.dimention, &dimention};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(clampKernel, grid, block, args, 0, NULL));
 }
 
+void Buffer::normalize(Buffer& buf) {
+    int height = 1;
+    dim3 block = getBlock(buf.num, height);
+    dim3 grid = getGrid(block, buf.num, height);
+    void* args[] = {&buf.buffer, &buf.buffer, &buf.num, &height, &buf.dimention };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(normalizeKernel, grid, block, args, 0, NULL));
+}
 
 void BufferGrad::init(BufferGrad& buf, int num, int dimention) {
     Buffer::init(buf, num, dimention);
@@ -220,10 +299,11 @@ void Attribute::copy(Attribute& dst, Attribute& src) {
 }
 
 void Attribute::liner(Attribute& attr, float w, float b) {
+    int dimention = 1;
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
-    void* args[] = { &attr.vbo, &w,&b,&attr.vboNum,&attr.dimention };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferLinerKernel, grid, block, args, 0, NULL));
+    void* args[] = { &attr.vbo, &attr.vbo, &w, &b, &attr.vboNum, &attr.dimention, &dimention};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(linerKernel, grid, block, args, 0, NULL));
 }
 
 __global__ void distanceErrorKernel(const Attribute predict, const Attribute target, float* sum) {
@@ -252,18 +332,20 @@ float Attribute::distanceError(Attribute& predict, Attribute& target) {
 }
 
 void Attribute::addRandom(Attribute& attr, float min, float max) {
+    int dimention = 1;
     unsigned int seed = rand();
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
-    void* args[] = { &attr.vbo,&min,&max,&attr.vboNum,&attr.dimention, &seed };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferRandomKernel, grid, block, args, 0, NULL));
+    void* args[] = { &attr.vbo, &min, &max, &attr.vboNum, &attr.dimention, &dimention, &seed };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, args, 0, NULL));
 }
 
 void Attribute::step(Attribute& attr, float threshold) {
+    int dimention = 1;
     dim3 block = getBlock(attr.vboNum, attr.dimention);
     dim3 grid = getGrid(block, attr.vboNum, attr.dimention);
-    void* args[] = { &attr.vbo, &threshold,&attr.vboNum,&attr.dimention };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(BufferStepKernel, grid, block, args, 0, NULL));
+    void* args[] = { &attr.vbo, &attr.vbo, &threshold,&attr.vboNum, &attr.dimention, &dimention};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(stepKernel, grid, block, args, 0, NULL));
 }
 
 void AttributeGrad::init(AttributeGrad& attr, int vboNum, int vaoNum, int dimention) {
@@ -446,136 +528,56 @@ void Texture::loadBMP(const char* path, Texture& texture, int miplevel) {
     buildMIP(texture);
 }
 
-__global__ void TextureSetColorKernel (const Texture texture, int index, int width, int height, float* color) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    int pz = blockIdx.z;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * (py + height * pz);
-
-    for (int i = 0; i < texture.channel; i++) {
-        texture.texture[index][pidx * texture.channel + i] = color[i];
-    }
-}
-
 void Texture::setColor(Texture& texture, float* color) {
-    int w = texture.width, h = texture.height;
-    int i = 0;
+    int width = texture.width, height = texture.height;
     float* dev_color;
     CUDA_ERROR_CHECK(cudaMalloc(&dev_color, (size_t)texture.channel * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMemcpy(dev_color, color, (size_t)texture.channel * sizeof(float), cudaMemcpyHostToDevice));
-    void* args[] = { &texture,&i, &w, &h ,&dev_color };
-    for (; i < texture.miplevel; i++) {
-        dim3 block = getBlock(w, h);
-        dim3 grid = getGrid(block, w, h);
-        CUDA_ERROR_CHECK(cudaLaunchKernel(TextureSetColorKernel, grid, block, args, 0, NULL));
-        w >>= 1; h >>= 1;
+    for (int i = 0; i < texture.miplevel; i++) {
+        void* args[] = { &texture.texture[i], &width, &height ,&texture.channel, &dev_color };
+        dim3 block = getBlock(width, height);
+        dim3 grid = getGrid(block, width, height);
+        CUDA_ERROR_CHECK(cudaLaunchKernel(setValueKernel, grid, block, args, 0, NULL));
+        width >>= 1; height >>= 1;
     }
     CUDA_ERROR_CHECK(cudaFree(dev_color));
 }
 
-__global__ void TextureLinerKernel (const Texture texture, int index, int width, int height, float w, float b) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    int pz = blockIdx.z;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * (py + height * pz);
-
-    for (int i = 0; i < texture.channel; i++) {
-        texture.texture[index][pidx * texture.channel + i] = texture.texture[index][pidx * texture.channel + i] * w + b;
-    }
-}
-
 void Texture::liner(Texture& texture, float w, float b) {
-    int w_ = texture.width, h_ = texture.height;
-    int i = 0;
-    void* args[] = { &texture,&i, &w_, &h_, &w, &b};
-    for (; i < texture.miplevel; i++) {
-        dim3 block = getBlock(w_, h_);
-        dim3 grid = getGrid(block, w_, h_);
-        CUDA_ERROR_CHECK(cudaLaunchKernel(TextureLinerKernel, grid, block, args, 0, NULL));
-        w_ >>= 1; h_ >>= 1;
-    }
-}
-
-__global__ void normalizeKernel (const Texture texture, int index, int width, int height) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    int pz = blockIdx.z;
-    if (px >= width || py >= height)return;
-    int pidx = px + width * (py + height * pz);
-
-    float s = 0.f;
-    for (int i = 0; i < texture.channel; i++) {
-        float v = texture.texture[index][pidx * texture.channel + i];
-        s += v * v;
-    }
-    s = 1.f/sqrt(s);
-    if (isfinite(s)) {
-        for (int i = 0; i < texture.channel; i++) {
-            texture.texture[index][pidx * texture.channel + i] *= s;
-        }
-    }
-    else {
-        for (int i = 0; i < texture.channel - 1; i++) {
-            texture.texture[index][pidx * texture.channel + i] = 0.f;
-        }
-        texture.texture[index][(pidx + 1) * texture.channel - 1] = 1.f;
+    int width = texture.width, height = texture.height;
+    for (int i = 0; i < texture.miplevel; i++, width >>= 1, height >>= 1) {
+        void* args[] = { &texture.texture[i], &texture.texture[i], &w, &b, &width, &height, &texture.channel};
+        dim3 block = getBlock(width, height);
+        dim3 grid = getGrid(block, width, height, texture.channel);
+        CUDA_ERROR_CHECK(cudaLaunchKernel(linerKernel, grid, block, args, 0, NULL));
     }
 }
 
 void Texture::normalize(Texture& texture) {
-    int w = texture.width, h = texture.height;
-    int i = 0;
-    void* args[] = { &texture,&i, &w, &h};
-    for (; i < texture.miplevel; i++) {
-        dim3 block = getBlock(w, h);
-        dim3 grid = getGrid(block, w, h);
+    int width = texture.width, height = texture.height;
+    for (int i = 0; i < texture.miplevel; i++, width >>= 1, height >>= 1) {
+        dim3 block = getBlock(width, height);
+        dim3 grid = getGrid(block, width, height);
+        void* args[] = { &texture.texture[i], &texture.texture[i], &width, &height, &texture.channel};
         CUDA_ERROR_CHECK(cudaLaunchKernel(normalizeKernel, grid, block, args, 0, NULL));
-        w >>= 1; h >>= 1;
-    }
-}
-
-__global__ void TextureRandomKernel(const Texture texture, float max, float min, unsigned int seed) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    int pz = blockIdx.z;
-    if (px >= texture.width || py >= texture.height)return;
-    int pidx = px + texture.width * (py + texture.height * pz);
-
-    for (int i = 0; i < texture.channel; i++) {
-        texture.texture[0][pidx * texture.channel + i] = min + (max - min) * getUniform(pidx * texture.channel + i,seed,0xf122ba22);
     }
 }
 
 void Texture::addRandom(Texture& texture, float max, float min) {
-    int w_ = texture.width, h_ = texture.height;
+    int dimention = 1;
     unsigned int seed = rand();
     dim3 block = getBlock(texture.width, texture.height);
-    dim3 grid = getGrid(block, texture.width, texture.height);
-    void* args[] = { &texture,&max,&min ,&seed };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(TextureRandomKernel, grid, block, args, 0, NULL));
+    dim3 grid = getGrid(block, texture.width, texture.height, texture.channel);
+    void* args[] = { &texture.texture[0], &max, &min ,&texture.width, &texture.height, &dimention, &seed };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, args, 0, NULL));
     buildMIP(texture);
 }
 
-__global__ void TextureClampKernel(const Texture texture, float min, float max) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    int pz = blockIdx.z;
-    if (px >= texture.width || py >= texture.height)return;
-    int pidx = px + texture.width * (py + texture.height * pz);
-
-    for (int i = 0; i < texture.channel; i++) {
-        texture.texture[0][pidx * texture.channel + i] = clamp(texture.texture[0][pidx * texture.channel + i], min, max);
-    }
-}
-
 void Texture::clamp(Texture& texture, float min, float max) {
-    int w_ = texture.width, h_ = texture.height;
     dim3 block = getBlock(texture.width, texture.height);
-    dim3 grid = getGrid(block, texture.width, texture.height);
-    void* args[] = { &texture,&min ,&max};
-    CUDA_ERROR_CHECK(cudaLaunchKernel(TextureClampKernel, grid, block, args, 0, NULL));
+    dim3 grid = getGrid(block, texture.width, texture.height, texture.channel);
+    void* args[] = { &texture.texture[0], &texture.texture[0], &min ,&max, &texture.width, &texture.height, &texture.channel};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(clampKernel, grid, block, args, 0, NULL));
     buildMIP(texture);
 }
 
@@ -631,4 +633,118 @@ void TextureGrad::gradSumup(TextureGrad& texture) {
         CUDA_ERROR_CHECK(cudaLaunchKernel(gardAddThrough, grid, block, args, 0, NULL));
         w <<= 1; h <<= 1;
     }
+}
+
+
+
+void SGBuffer::init(SGBuffer& sgbuf, int num, int channel) {
+    sgbuf.num = num;
+    sgbuf.channel = channel;
+    CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.axis, (size_t)num * 3 * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.sharpness, (size_t)num * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.amplitude, (size_t)num * channel * sizeof(float)));
+}
+
+void SGBuffer::copy(SGBuffer& dst, float* axis, float* sharpness, float* amplitude) {
+    if (axis != nullptr)
+        CUDA_ERROR_CHECK(cudaMemcpy(dst.axis, axis, (size_t)dst.num * 3 * sizeof(float), cudaMemcpyHostToDevice));
+    if (sharpness != nullptr)
+        CUDA_ERROR_CHECK(cudaMemcpy(dst.sharpness, sharpness, (size_t)dst.num * sizeof(float), cudaMemcpyHostToDevice));
+    if (amplitude != nullptr)
+        CUDA_ERROR_CHECK(cudaMemcpy(dst.amplitude, amplitude, (size_t)dst.num * dst.channel * sizeof(float), cudaMemcpyHostToDevice));
+}
+
+void SGBuffer::randomize(SGBuffer& sgbuf) {
+    int dimention = 1;
+    unsigned int seed = rand();
+    dim3 block = getBlock(sgbuf.num, dimention);
+    dim3 grid = getGrid(block, sgbuf.num, dimention);
+
+    void* sargs[] = { &sgbuf.axis, &sgbuf.num, &dimention, &seed };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(sphericalRandomKernel, grid, block, sargs, 0, NULL));
+
+    int height = 1;
+    float min = 0.f, max = 1.f;
+    seed = rand();
+    void* rargs[] = { &sgbuf.sharpness, &min, &max, &sgbuf.num, &height, &dimention, &seed };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, rargs, 0, NULL));
+
+    float exp = 1.3478f, c = 1e3;
+    void* eargs[] = { &sgbuf.sharpness,  &sgbuf.sharpness, &c, &exp, &sgbuf.num, &height, &dimention };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(powbaseKernel, grid, block, eargs, 0, NULL));
+
+    min = 0.f, max = 1.f;
+    height = sgbuf.channel;
+    seed = rand();
+    rargs[0] = &sgbuf.amplitude;
+    CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, rargs, 0, NULL));
+}
+
+
+__global__ void sgBakeKernel(const SGBuffer sgbuf, const Texture texture) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= texture.width || py >= texture.height)return;
+    int pidx = px + texture.width * (py + texture.height * pz);
+
+    float phi = (2.f * (float)px / (float)texture.width - 1.f) * 3.14159265f;
+    float theta = (2.f * (float)py / (float)texture.height - 1.f) * 1.5707963f;
+    float3 axis = make_float3(sin(phi) * cos(theta), sin(theta), cos(phi) * cos(theta));
+
+    for (int i = 0; i < sgbuf.num; i++) {
+        float3 sgaxis = ((float3*)sgbuf.axis)[i];
+        float sgsharpness = sgbuf.sharpness[i];
+        float sgvalue = exp(sgsharpness * (dot(axis, sgaxis) - 1.f));
+        for (int k = 0; k < sgbuf.channel; k++) {
+            AddNaNcheck(texture.texture[0][pidx * sgbuf.channel + k], sgbuf.amplitude[i * sgbuf.channel + k] * sgvalue);
+        }
+    }
+}
+
+void SGBuffer::bake(SGBuffer& sgbuf, Texture& texture) {
+    dim3 block = getBlock(texture.width, texture.height);
+    dim3 grid = getGrid(block, texture.width, texture.height);
+    void* args[] = { &sgbuf, &texture };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(sgBakeKernel, grid, block, args, 0, NULL));
+}
+
+
+void GLbuffer::init(GLbuffer& rb, float* buffer, int width, int height, int channel) {
+    rb.width = width;
+    rb.height = height;
+    rb.channel = channel;
+    rb.buffer = buffer;
+    CUDA_ERROR_CHECK(cudaMallocHost(&rb.gl_buffer, rb.Size()));
+    glGenTextures(1, &rb.id);
+    glBindTexture(GL_TEXTURE_2D, rb.id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT15, rb.id, 0);
+}
+
+void GLbuffer::draw(GLbuffer& rb, GLint internalformat, GLenum format, float minX, float minY, float maxX, float maxY) {
+    CUDA_ERROR_CHECK(cudaMemcpy(rb.gl_buffer, rb.buffer, rb.Size(), cudaMemcpyDeviceToHost));
+    glBindTexture(GL_TEXTURE_2D, rb.id);
+    glTexImage2D(GL_TEXTURE_2D, 0, internalformat, rb.width, rb.height, 0, format, GL_FLOAT, rb.gl_buffer);
+    glBegin(GL_POLYGON);
+    glTexCoord2f(0.f, 0.f); glVertex2f(minX, minY);
+    glTexCoord2f(0.f, 1.f); glVertex2f(minX, maxY);
+    glTexCoord2f(1.f, 1.f); glVertex2f(maxX, maxY);
+    glTexCoord2f(1.f, 0.f); glVertex2f(maxX, minY);
+    glEnd();
+}
+
+void GLbuffer::draw(GLbuffer& rb, GLint internalformat, GLenum format, float texminX, float texminY, float texmaxX, float texmaxY, float minX, float minY, float maxX, float maxY) {
+    CUDA_ERROR_CHECK(cudaMemcpy(rb.gl_buffer, rb.buffer, rb.Size(), cudaMemcpyDeviceToHost));
+    glBindTexture(GL_TEXTURE_2D, rb.id);
+    glTexImage2D(GL_TEXTURE_2D, 0, internalformat, rb.width, rb.height, 0, format, GL_FLOAT, rb.gl_buffer);
+    glBegin(GL_POLYGON);
+    glTexCoord2f(texminX, texminY); glVertex2f(minX, minY);
+    glTexCoord2f(texminX, texmaxY); glVertex2f(minX, maxY);
+    glTexCoord2f(texmaxX, texmaxY); glVertex2f(maxX, maxY);
+    glTexCoord2f(texmaxX, texminY); glVertex2f(maxX, minY);
+    glEnd();
 }
