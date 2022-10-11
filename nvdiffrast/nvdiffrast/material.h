@@ -49,6 +49,49 @@ public:
 
 
 
+struct ViewAxisKernelParams{
+	int width;
+	int height;
+	int depth;
+
+	float* rast;
+
+	float* rot;
+	glm::mat4* view;
+	glm::mat4* projection;
+	float* pvinv;
+
+	float* out;
+};
+
+struct ViewAxisGradKernelParams{
+	float* rast;
+	float* normal;
+
+	glm::mat4* view;
+	glm::mat4* projection;
+
+	float* out;
+};
+
+struct ViewAxisParams {
+	ViewAxisKernelParams kernel;
+	size_t Size() { return (size_t)kernel.width * kernel.height * kernel.depth * 3 * sizeof(float); };
+};
+
+struct ViewAxisGradParams : ViewAxisParams {
+	ViewAxisGradKernelParams grad;
+};
+
+class ViewAxis {
+public:
+	static void init(ViewAxisParams& view, RotationParams& rot, CameraParams& cam, RasterizeParams& rast);
+	static void forward(ViewAxisParams& view);
+};
+
+
+
+
 struct ReflectAxisKernelParams{
 	int width;
 	int height;
@@ -59,9 +102,7 @@ struct ReflectAxisKernelParams{
 	unsigned int* normalidx;
 
 	float* rot;
-	glm::mat4* view;
-	glm::mat4* projection;
-	float* pvinv;
+	float* view;
 
 	float* out;
 };
@@ -70,8 +111,8 @@ struct ReflectAxisGradKernelParams{
 	float* rast;
 	float* normal;
 
-	glm::mat4* view;
-	glm::mat4* projection;
+	float* rot;
+	float* view;
 
 	float* out;
 };
@@ -87,7 +128,7 @@ struct ReflectAxisGradParams : ReflectAxisParams {
 
 class ReflectAxis {
 public:
-	static void init(ReflectAxisParams& ref, RotationParams& rot, CameraParams& cam, RasterizeParams& rast, Attribute& normal);
+	static void init(ReflectAxisParams& ref, ViewAxisParams& view, RotationParams& rot, RasterizeParams& rast, Attribute& normal);
 	static void forward(ReflectAxisParams& ref);
 };
 
@@ -102,6 +143,7 @@ struct SphericalGaussianKernelParams {
 	float* rast;
 
 	float* normal;
+	float* view;
 	float* reflect;
 	float* diffuse;
 	float* roughness;
@@ -119,6 +161,7 @@ struct SphericalGaussianKernelParams {
 
 struct SphericalGaussianGradKernelParams {
 	float* normal;
+	float* view;
 	float* reflect;
 	float* diffuse;
 	float* roughness;
@@ -142,6 +185,6 @@ struct SphericalGaussianGradParams : SphericalGaussianParams{
 
 class SphericalGaussian {
 public:
-	static void init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ReflectAxisParams& reflect, TexturemapParams& diffuse, TexturemapParams& roughness, SGBuffer& sgbuf, float ior);
+	static void init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, ReflectAxisParams& reflect, TexturemapParams& diffuse, TexturemapParams& roughness, SGBuffer& sgbuf, float ior);
 	static void forward(SphericalGaussianParams& sg);
 };

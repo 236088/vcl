@@ -15,7 +15,7 @@ void PresetPrimitives::init() {
 	//Texture::loadBMP("../../textures/Tiles074_1K_NormalGL.bmp", _normalmap, 8);
 	//Texture::loadBMP("../../textures/Tiles074_1K_Roughness.bmp", _roughnessmap, 8);
 	Texture::liner(_normalmap, 2.f, -1.f);
-	SGBuffer::init(sgbuf, 256, 3);
+	SGBuffer::init(sgbuf, 9, 3);
 	Texture::init(sgbake, 1024, 512, 3, 1);
 
 	float axis[] = {
@@ -45,8 +45,8 @@ void PresetPrimitives::init() {
 		.00431815f, .630815f, 1.12645f,
 		1.f, 1.f, 1.f
 	};
-	//SGBuffer::copy(sgbuf, axis, sharpness, amplitude);
-	SGBuffer::randomize(sgbuf);
+	SGBuffer::copy(sgbuf, axis, sharpness, amplitude);
+	//SGBuffer::randomize(sgbuf);
 
 	SGBuffer::bake(sgbuf, sgbake);
 	GLbuffer::init(bake_buffer, sgbake.texture[0], 1024, 512, 3);
@@ -62,9 +62,10 @@ void PresetPrimitives::init() {
 	Texturemap::init(diffusemap, rast, intr, _diffusemap);
 	Texturemap::init(normalmap, rast, intr, _normalmap);
 	NormalAxis::init(normal_axis, rot, rast, _normal, _pos, _texel, normalmap);
-	ReflectAxis::init(reflect_axis, rot, cam, rast, _normal);
+	ViewAxis::init(view_axis, rot, cam, rast);
+	ReflectAxis::init(reflect_axis, view_axis, rot, rast, _normal);
 	Texturemap::init(roughnessmap, rast, intr, _roughnessmap);
-	SphericalGaussian::init(sg ,rast, normal_axis, reflect_axis, diffusemap, roughnessmap, sgbuf, 1.57f);
+	SphericalGaussian::init(sg ,rast, normal_axis, view_axis, reflect_axis, diffusemap, roughnessmap, sgbuf, 1.57f);
 	Antialias::init(aa, rast, proj, sg.kernel.out, 3);
 	Filter::init(flt, rast, aa.kernel.out, 3, 16);
 
@@ -76,7 +77,7 @@ void PresetPrimitives::init() {
 	GLbuffer::init(normal_buffer, normal_axis.kernel.out, resolution, resolution, 3);
 	GLbuffer::init(sgdiffenv_buffer, sg.kernel.outDiffenv, resolution, resolution, 3);
 	GLbuffer::init(sgspecenv_buffer, sg.kernel.outSpecenv, resolution, resolution, 3);
-	GLbuffer::init(sg_buffer, sg.kernel.out, resolution, resolution, 3);
+	GLbuffer::init(sg_buffer, diffusemap.kernel.out, resolution, resolution, 3);
 	GLbuffer::init(aa_buffer, aa.kernel.out, resolution, resolution, 3);
 	GLbuffer::init(flt_buffer, flt.kernel.out, resolution, resolution, 3);
 
@@ -115,6 +116,7 @@ void PresetPrimitives::update(double dt, double t, unsigned int step, bool& play
 	Texturemap::forward(diffusemap);
 	Texturemap::forward(normalmap);
 	NormalAxis::forward(normal_axis);
+	ViewAxis::forward(view_axis);
 	ReflectAxis::forward(reflect_axis);
 	Texturemap::forward(roughnessmap);
 	SphericalGaussian::forward(sg);

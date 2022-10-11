@@ -79,17 +79,56 @@ void NormalAxis::forward(NormalAxisParams& norm){
 
 
 
-void ReflectAxis::init(ReflectAxisParams& ref, RotationParams& rot, CameraParams& cam, RasterizeParams& rast, Attribute& normal) {
+void ViewAxis::init(ViewAxisParams& view, RotationParams& rot, CameraParams& cam, RasterizeParams& rast) {
+    view.kernel.width = rast.kernel.width;
+    view.kernel.height = rast.kernel.height;
+    view.kernel.depth = rast.kernel.depth;
+    view.kernel.rot = rot.kernel.out;
+    view.kernel.view = cam.kernel.view;
+    view.kernel.projection = cam.kernel.projection;
+    CUDA_ERROR_CHECK(cudaMalloc(&view.kernel.pvinv, 9 * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMalloc(&view.kernel.out, view.Size()));
+}
+
+__global__ void ViewAxisForwardKernel(const ViewAxisKernelParams view) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= view.width || py >= view.height || pz >= view.depth)return;
+    int pidx = px + view.width * (py + view.height * pz);
+
+    float2 screenpos = make_float2(
+        (float)px / (float)view.width * 2.f - 1.f,
+        (float)py / (float)view.height * 2.f - 1.f
+    );
+
+    ((float3*)view.out)[pidx] = normalize(
+        ((float3*)view.pvinv)[0] * screenpos.x
+        + ((float3*)view.pvinv)[1] * screenpos.y
+        + ((float3*)view.pvinv)[2]);
+}
+
+void ViewAxis::forward(ViewAxisParams& view) {
+    glm::mat3 pvinv = glm::inverse(glm::mat3(*view.kernel.projection) * glm::mat3(*view.kernel.view));
+    CUDA_ERROR_CHECK(cudaMemcpy(view.kernel.pvinv, &pvinv, 9 * sizeof(float), cudaMemcpyHostToDevice));
+
+    dim3 block = getBlock(view.kernel.width, view.kernel.height);
+    dim3 grid = getGrid(block, view.kernel.width, view.kernel.height, view.kernel.depth);
+    void* args[] = { &view.kernel};
+    CUDA_ERROR_CHECK(cudaLaunchKernel(ViewAxisForwardKernel, grid, block, args, 0, NULL));
+}
+
+
+
+void ReflectAxis::init(ReflectAxisParams& ref, ViewAxisParams& view, RotationParams& rot, RasterizeParams& rast, Attribute& normal) {
     ref.kernel.width = rast.kernel.width;
     ref.kernel.height = rast.kernel.height;
     ref.kernel.depth = rast.kernel.depth;
     ref.kernel.rast = rast.kernel.out;
     ref.kernel.normal = normal.vbo;
     ref.kernel.normalidx = normal.vao;
+    ref.kernel.view = view.kernel.out;
     ref.kernel.rot = rot.kernel.out;
-    ref.kernel.view = cam.kernel.view;
-    ref.kernel.projection = cam.kernel.projection;
-    CUDA_ERROR_CHECK(cudaMalloc(&ref.kernel.pvinv, 9 * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMalloc(&ref.kernel.out, ref.Size()));
 }
 
@@ -100,42 +139,26 @@ __global__ void ReflectAxisForwardKernel(const ReflectAxisKernelParams ref) {
     if (px >= ref.width || py >= ref.height || pz >= ref.depth)return;
     int pidx = px + ref.width * (py + ref.height * pz);
 
-    float2 screenpos = make_float2(
-        (float)px / (float)ref.width * 2.f - 1.f,
-        (float)py / (float)ref.height * 2.f - 1.f
-    );
-
-    float3 d = -normalize(
-        ((float3*)ref.pvinv)[0] * screenpos.x
-        + ((float3*)ref.pvinv)[1] * screenpos.y
-        + ((float3*)ref.pvinv)[2]);
-
     float4 r = ((float4*)ref.rast)[pidx];
     int idx = (int)r.w - 1;
-    if (idx < 0) {
-        ((float3*)ref.out)[pidx] = d;
-    }
-    else {
-        float3 n2 = ((float3*)ref.normal)[ref.normalidx[idx * 3 + 2]];
-        float3 n0 = ((float3*)ref.normal)[ref.normalidx[idx * 3]] - n2;
-        float3 n1 = ((float3*)ref.normal)[ref.normalidx[idx * 3 + 1]] - n2;
-        float3 N = normalize(n0 * r.x + n1 * r.y + n2);
-        float3 n = make_float3(
-            ref.rot[0] * N.x + ref.rot[4] * N.y + ref.rot[8] * N.z,
-            ref.rot[1] * N.x + ref.rot[5] * N.y + ref.rot[9] * N.z,
-            ref.rot[2] * N.x + ref.rot[6] * N.y + ref.rot[10] * N.z
-        );
-        float3 p = 2.f * dot(d, n) * n - d;
-        ((float3*)ref.out)[pidx] = p;
-    }
+    if (idx < 0) return;
+
+    float3 d = -((float3*)ref.view)[pidx];
+    float3 n2 = ((float3*)ref.normal)[ref.normalidx[idx * 3 + 2]];
+    float3 n0 = ((float3*)ref.normal)[ref.normalidx[idx * 3]] - n2;
+    float3 n1 = ((float3*)ref.normal)[ref.normalidx[idx * 3 + 1]] - n2;
+    float3 N = normalize(n0 * r.x + n1 * r.y + n2);
+    float3 n = make_float3(
+        ref.rot[0] * N.x + ref.rot[4] * N.y + ref.rot[8] * N.z,
+        ref.rot[1] * N.x + ref.rot[5] * N.y + ref.rot[9] * N.z,
+        ref.rot[2] * N.x + ref.rot[6] * N.y + ref.rot[10] * N.z
+    );
+    float3 p = 2.f * dot(d, n) * n - d;
+    ((float3*)ref.out)[pidx] = p;
 
 }
 
 void ReflectAxis::forward(ReflectAxisParams& ref) {
-
-    glm::mat3 pvinv = glm::inverse(glm::mat3(*ref.kernel.projection) * glm::mat3(*ref.kernel.view));
-    CUDA_ERROR_CHECK(cudaMemcpy(ref.kernel.pvinv, &pvinv, 9 * sizeof(float), cudaMemcpyHostToDevice));
-
     dim3 block = getBlock(ref.kernel.width, ref.kernel.height);
     dim3 grid = getGrid(block, ref.kernel.width, ref.kernel.height, ref.kernel.depth);
     void* args[] = { &ref.kernel};
@@ -144,7 +167,7 @@ void ReflectAxis::forward(ReflectAxisParams& ref) {
 
 
 
-void SphericalGaussian::init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ReflectAxisParams& reflect, TexturemapParams& diffuse, TexturemapParams& roughness, SGBuffer& sgbuf, float ior) {
+void SphericalGaussian::init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, ReflectAxisParams& reflect, TexturemapParams& diffuse, TexturemapParams& roughness, SGBuffer& sgbuf, float ior) {
     sg.kernel.width = rast.kernel.width;
     sg.kernel.height = rast.kernel.height;
     sg.kernel.depth = rast.kernel.depth;
@@ -153,6 +176,7 @@ void SphericalGaussian::init(SphericalGaussianParams& sg, RasterizeParams& rast,
     sg.kernel.rast = rast.kernel.out;
 
     sg.kernel.normal = normal.kernel.out;
+    sg.kernel.view = view.kernel.out;
     sg.kernel.reflect = reflect.kernel.out;
     sg.kernel.diffuse = diffuse.kernel.out;
     sg.kernel.roughness = roughness.kernel.out;
@@ -176,6 +200,7 @@ __global__ void SGForwardKernel(const SphericalGaussianKernelParams sg) {
     if (px >= sg.width || py >= sg.height || pz >= sg.depth)return;
     int pidx = px + sg.width * (py + sg.height * pz);
 
+    float3 v = ((float3*)sg.view)[pidx];
     float3 p = ((float3*)sg.reflect)[pidx];
 
     float4 r = ((float4*)sg.rast)[pidx];
@@ -184,7 +209,7 @@ __global__ void SGForwardKernel(const SphericalGaussianKernelParams sg) {
         for (int i = 0; i < sg.sgnum; i++) {
             float3 sgaxis = ((float3*)sg.axis)[i];
             float sgsharpness = sg.sharpness[i];
-            float sgvalue = exp(sgsharpness * (dot(p, sgaxis) - 1.f));
+            float sgvalue = exp(sgsharpness * (dot(v, sgaxis) - 1.f));
             for (int k = 0; k < sg.channel; k++) {
                 AddNaNcheck(sg.out[pidx * sg.channel + k], sg.amplitude[i * sg.channel + k] * sgvalue);
             }
@@ -211,9 +236,13 @@ __global__ void SGForwardKernel(const SphericalGaussianKernelParams sg) {
     float F = .5f * f0 * f0 * (1.f + f1 * f1);
 
     float pn2 = pn * pn;
-    float G = 1.f / (pn + sqrt(pn2 + m * m * (1.f - pn2)));
+    float Gp = 1.f / (pn + sqrt(pn2 + m * m * (1.f - pn2)));
 
-    float specamplitude = F * G * G;
+    float vn = abs(dot(v, n));
+    float vn2 = vn * vn;
+    float Gv = 1.f / (vn + sqrt(vn2 + m * m * (1.f - vn2)));
+
+    float specamplitude = F * Gp * Gv;
 
     for (int i = 0; i < sg.sgnum; i++) {
         float sgsharpness = sg.sharpness[i];

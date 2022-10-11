@@ -40,6 +40,7 @@ class PresetPrimitives {
 	TexturemapParams normalmap;
 	TexturemapParams roughnessmap;
 	NormalAxisParams normal_axis;
+	ViewAxisParams view_axis;
 	ReflectAxisParams reflect_axis;
 	SphericalGaussianParams sg;
 	AntialiasParams aa;
