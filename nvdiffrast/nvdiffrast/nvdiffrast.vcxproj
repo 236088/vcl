@@ -14,6 +14,7 @@
     <ClCompile Include="common.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="matrix.cu" />
+    <ClCompile Include="preset_pose.cpp" />
     <ClCompile Include="preset_primitives.cpp" />
     <ClCompile Include="rasterize.cpp" />
   </ItemGroup>
@@ -26,7 +27,7 @@
     <ClInclude Include="loss.h" />
     <ClInclude Include="material.h" />
     <ClInclude Include="matrix.h" />
-    <ClInclude Include="normalcalc.h" />
+    <ClInclude Include="computenormal.h" />
     <ClInclude Include="optimize.h" />
     <ClInclude Include="preset.h" />
     <ClInclude Include="project.h" />
@@ -42,7 +43,7 @@
     <CudaCompile Include="interpolate.cu" />
     <CudaCompile Include="loss.cu" />
     <CudaCompile Include="material.cu" />
-    <CudaCompile Include="normalcalc.cu" />
+    <CudaCompile Include="computenormal.cu" />
     <CudaCompile Include="optimize.cu" />
     <CudaCompile Include="project.cu" />
     <CudaCompile Include="rasterize.cu" />

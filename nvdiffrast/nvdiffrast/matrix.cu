@@ -23,6 +23,7 @@ void Rotation::setRandom(RotationParams& rot) {
 	rot.kernel.q = glm::angleAxis(angle, glm::normalize(glm::vec3(x, y, z)));
 }
 
+
 void Rotation::setRotation(RotationParams& rot, float angle, float x, float y, float z){
 	float s = sin(angle * .5f)/ sqrt(x * x + y * y + z * z);
 	rot.kernel.q = glm::quat(cos(angle * .5f), s * x, s * y, s * z);
@@ -115,14 +116,14 @@ void Rotation::step(RotationGradParams& rot) {
 	float d = sqrt(glm::dot(rot.grad.q, rot.grad.q));
 	if (d > 0) {
 		std::cout <<
-			"distance :" << d << 
+			"distance :" << d <<
 			" similar :" << glm::dot(rot.kernel.q, rot.grad.q) / d << std::endl;
 	}
 	else {
-		std::cout << 
+		std::cout <<
 			"distance :" << d << std::endl;
 	}
-	
+
 
 	glm::quat q = rot.kernel.q;
 	for (int i = 0; i < 4; i++) {
@@ -135,6 +136,12 @@ void Rotation::step(RotationGradParams& rot) {
 	rot.kernel.q = glm::normalize(q);
 }
 
+void Rotation::reset(RotationGradParams& rot){
+	rot.rhomt = rot.rhom;
+	rot.rhovt = rot.rhov;
+	rot.m = glm::quat();
+	rot.v = glm::quat();
+}
 
 
 void Camera::init(CameraParams& cam, RotationParams& rot, glm::vec3 eye, glm::vec3 direction, glm::vec3 up, float size, float aspect, float znear, float zfar) {
@@ -154,8 +161,8 @@ void Camera::init(CameraGradParams& cam, RotationParams& rot, glm::vec3 eye, glm
 	init((CameraParams&)cam, rot, eye, direction, up, size, aspect, znear, zfar);
 	cam.grad.eye = glm::vec3();
 	cam.grad.size = 0.f;
-	CUDA_ERROR_CHECK(cudaMallocHost(&cam.kernel.view, 16 * sizeof(float)));
-	CUDA_ERROR_CHECK(cudaMallocHost(&cam.kernel.projection, 16 * sizeof(float)));
+	CUDA_ERROR_CHECK(cudaMallocHost(&cam.grad.view, 16 * sizeof(float)));
+	CUDA_ERROR_CHECK(cudaMallocHost(&cam.grad.projection, 16 * sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMallocHost(&cam.grad.mat, 16 * sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMalloc(&cam.grad.out, 16 * sizeof(float)));
 }
@@ -170,13 +177,11 @@ glm::quat getLookAt(glm::vec3 direction, glm::vec3 up) {
 	glm::vec3 s = glm::normalize(glm::cross(up, f));
 	glm::vec3 u = glm::normalize(glm::cross(f, s));
 
-	float qw = .5f * sqrt(s.x + u.y + f.z + 1.f);
-	float iqw4 = .25f / qw;
 	return glm::quat(
-		qw,
-		iqw4 * (f.y - u.z),
-		iqw4 * (s.z - f.x),
-		iqw4 * (u.x - s.y)
+		.5f * sqrt(s.x - u.y - f.z + 1.f),
+		.5f * sqrt(-s.x + u.y - f.z + 1.f),
+		.5f * sqrt(-s.x - u.y + f.z + 1.f),
+		.5f * sqrt(s.x + u.y + f.z + 1.f)
 	);
 }
 
@@ -209,7 +214,7 @@ void Camera::setCam(CameraParams& cam, glm::vec3 eye, glm::vec3 direction, glm::
 void Camera::forward(CameraParams& cam) {
 	*cam.kernel.view = getView(cam.kernel.q, cam.kernel.eye);
 
-	glm::vec4 e = (*cam.kernel.view)[3];
+	glm::vec3 e = cam.kernel.eye;
 	float sy = cam.kernel.znear / cam.kernel.size;
 	float sx = sy / cam.kernel.aspect;
 	float ex = -e.x / e.z * sx;

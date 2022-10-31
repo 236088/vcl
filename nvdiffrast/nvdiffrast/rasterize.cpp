@@ -338,8 +338,8 @@ void Rasterize::wireframeinit(RasterizeParams& rast, ProjectParams& proj, int wi
 		in vec3 var_uv;
 		layout(location = 0) out vec4 out_raster;
 		void main() {
-			vec3 d = fwidth(var_uv);
-			vec3 f = step(d, var_uv);
+			vec3 d = fwidth(var_uv*.5f);
+			vec3 f = 1.f / (1.f + exp(16.f*(d - var_uv)));
 			float e = 1.f - min(min(f.x, f.y), f.z);
 			out_raster = vec4(e, e, e, 1.f);
 		})

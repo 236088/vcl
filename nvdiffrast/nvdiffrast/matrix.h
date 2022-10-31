@@ -44,6 +44,7 @@ public:
 	static void backward(RotationGradParams& rot);
 	static void init(RotationGradParams& rot, double eta, double rhom, double rhov, double eps);
 	static void step(RotationGradParams& rot);
+	static void reset(RotationGradParams& rot);
 };
 
 

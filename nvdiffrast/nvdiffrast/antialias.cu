@@ -9,7 +9,7 @@ void Antialias::init(AntialiasParams& aa, RasterizeParams& rast, ProjectParams& 
     aa.kernel.idx = proj.vao;
     aa.kernel.rast = rast.kernel.out;
     aa.kernel.in = in;
-    aa.projNum = proj.kernel.vboNum;
+    aa.projNum = proj.kernel.vecNum;
     aa.kernel.s = make_float2(rast.kernel.width / 2.f, rast.kernel.height / 2.f);
     CUDA_ERROR_CHECK(cudaMalloc(&aa.kernel.out, aa.Size()));
 }

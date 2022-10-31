@@ -10,7 +10,7 @@
 #include "material.h"
 #include "antialias.h"
 #include "filter.h"
-#include "normalcalc.h"
+#include "ComputeNormal.h"
 #include "loss.h"
 #include "optimize.h"
 
@@ -41,10 +41,10 @@ class PresetPrimitives {
 	TexturemapParams roughnessmap;
 	NormalAxisParams normal_axis;
 	ViewAxisParams view_axis;
-	ReflectAxisParams reflect_axis;
 	SphericalGaussianParams sg;
 	AntialiasParams aa;
 	FilterParams flt;
+	RasterizeParams wire;
 
 	RasterizeParams wireframe;
 	RasterizeParams idhash;
@@ -59,13 +59,48 @@ class PresetPrimitives {
 	GLbuffer sgdiffenv_buffer;
 	GLbuffer sgspecenv_buffer;
 	GLbuffer sg_buffer;
+	GLbuffer wire_buffer;
 
 	GLbuffer sample_buffer;
-
 
 public:
 	const int windowWidth = 2048;
 	const int windowHeight = 1024;
+	void init();
+	void display();
+	void update(double dt, double t, unsigned int step, bool& play);
+};
+
+class PresetPose {
+	RotationParams target_rot;
+	CameraParams target_cam;
+
+	Attribute target_pos;
+	Attribute target_color;
+	ProjectParams target_proj;
+	RasterizeParams target_rast;
+	InterpolateParams target_intr;
+	AntialiasParams target_aa;
+	GLbuffer gl_target;
+
+	RotationGradParams rot;
+	CameraGradParams cam;
+
+	AttributeGrad pos;
+	AttributeGrad color;
+	ProjectGradParams proj;
+	RasterizeGradParams rast;
+	InterpolateGradParams intr;
+	AntialiasGradParams aa;
+	GLbuffer gl;
+
+	LossParams loss;
+	float loss_sum;
+	double time;
+
+public:
+	const int windowWidth = 1024;
+	const int windowHeight = 512;
 	void init();
 	void display();
 	void update(double dt, double t, unsigned int step, bool& play);

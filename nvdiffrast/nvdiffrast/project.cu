@@ -68,7 +68,7 @@ void Project::init(ProjectGradParams& proj, float* mat, AttributeGrad& vec, Attr
 	proj.grad.vec = vec.grad;
 }
 
-__global__ void ProjectBackwardKernel(const ProjectKernelParams proj, const ProjectKernelGradParams grad, int r) {
+__global__ void ProjectBackwardKernel(const ProjectKernelParams proj, const ProjectKernelGradParams grad) {
 	int pidx = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (pidx >= proj.vecNum)return;
@@ -79,7 +79,7 @@ __global__ void ProjectBackwardKernel(const ProjectKernelParams proj, const Proj
 			grad.vec[pidx * 3 + 1] += proj.mat[4 + i] * g;
 			grad.vec[pidx * 3 + 2] += proj.mat[8 + i] * g;
 		}
-		if (grad.mat != nullptr && getUniform(pidx, r, 0x98765432) < .1f) {
+		if (grad.mat != nullptr ) {
 			grad.mat[i] += proj.vec[pidx * 3] * g;
 			grad.mat[4 + i] += proj.vec[pidx * 3 + 1] * g;
 			grad.mat[8 + i] += proj.vec[pidx * 3 + 2] * g;
@@ -90,7 +90,6 @@ __global__ void ProjectBackwardKernel(const ProjectKernelParams proj, const Proj
 void Project::backward(ProjectGradParams& proj) {
 	dim3 block = getBlock(proj.kernel.vecNum, 1);
 	dim3 grid = getGrid(block, proj.kernel.vecNum, 1);
-	unsigned int r = rand();
-	void* args[] = { &proj.kernel,&proj.grad, &r};
+	void* args[] = { &proj.kernel,&proj.grad};
 	CUDA_ERROR_CHECK(cudaLaunchKernel(ProjectBackwardKernel, grid, block, args, 0, NULL));
 }

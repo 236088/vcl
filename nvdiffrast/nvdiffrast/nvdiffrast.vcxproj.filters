@@ -11,7 +11,7 @@
     <CudaCompile Include="filter.cu" />
     <CudaCompile Include="buffer.cu" />
     <CudaCompile Include="loss.cu" />
-    <CudaCompile Include="normalcalc.cu" />
+    <CudaCompile Include="computenormal.cu" />
     <CudaCompile Include="extention.cu" />
   </ItemGroup>
   <ItemGroup>
@@ -20,6 +20,7 @@
     <ClCompile Include="rasterize.cpp" />
     <ClCompile Include="matrix.cu" />
     <ClCompile Include="preset_primitives.cpp" />
+    <ClCompile Include="preset_pose.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="antialias.h" />
@@ -35,7 +36,7 @@
     <ClInclude Include="filter.h" />
     <ClInclude Include="buffer.h" />
     <ClInclude Include="loss.h" />
-    <ClInclude Include="normalcalc.h" />
+    <ClInclude Include="computenormal.h" />
     <ClInclude Include="extention.h" />
   </ItemGroup>
   <ItemGroup>

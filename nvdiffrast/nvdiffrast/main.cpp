@@ -5,7 +5,13 @@ unsigned int step = 0;
 float loss_sum = 0;
 bool play = false;
 
+#define PRESET_NUM 1
+
+#if PRESET_NUM==0
 PresetPrimitives preset;
+#elif PRESET_NUM==1
+PresetPose preset;
+#endif
 
 
 static void InitFunc()

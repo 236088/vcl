@@ -96,6 +96,18 @@ __global__ void normalizeKernel(float* dst, float* src, int width, int height, i
     }
 }
 
+__global__ void sigmoidKernel(float* dst, float* src, float alpha, int width, int height, int dimention) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= width || py >= height || pz >= dimention)return;
+    int pidx = px + width * (py + height * pz);
+
+    for (int i = 0; i < dimention; i++) {
+        dst[pidx * dimention + i] = 1.f / (1.f + exp(-alpha * src[pidx * dimention + i]));
+    }
+}
+
 
 
 void Buffer::init(Buffer& buf, int num, int dimention) {
@@ -195,8 +207,8 @@ void Attribute::loadOBJ(const char* path, Attribute* pos, Attribute* texel, Attr
         return;
     }
 
-    std::vector<float> tempPos, tempTexel, tempNormal;
-    std::vector<unsigned int> tempPosIndex, tempTexelIndex, tempNormalIndex;
+    vector<float> tempPos, tempTexel, tempNormal;
+    vector<unsigned int> tempPosIndex, tempTexelIndex, tempNormalIndex;
     int posNum = 0, texelNum = 0, normalNum = 0, indexNum = 0;
     while (1) {
         char lineHeader[128];
@@ -669,7 +681,7 @@ void SGBuffer::randomize(SGBuffer& sgbuf) {
     void* rargs[] = { &sgbuf.sharpness, &min, &max, &sgbuf.num, &height, &dimention, &seed };
     CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, rargs, 0, NULL));
 
-    float exp = 1.3478f, c = 1e3;
+    float exp = .45f, c = 50.f;
     void* eargs[] = { &sgbuf.sharpness,  &sgbuf.sharpness, &c, &exp, &sgbuf.num, &height, &dimention };
     CUDA_ERROR_CHECK(cudaLaunchKernel(powbaseKernel, grid, block, eargs, 0, NULL));
 
@@ -680,6 +692,33 @@ void SGBuffer::randomize(SGBuffer& sgbuf) {
     CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, rargs, 0, NULL));
 }
 
+void SGBuffer::loadTXT(const char* path, SGBuffer* sgbuf) {
+    FILE* file = fopen(path, "r");
+    if (file == NULL) {
+        printf("Impossible to open the file !\n");
+        return;
+    }
+    SGBuffer::init(*sgbuf, 256, 3);
+    vector<float> axis, sharpness, amplitude;
+    for (int i = 0; i < sgbuf->num; i++) {
+        float v[7];
+        int matches = fscanf(file, "%f %f %f %f %f %f %f", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6]);
+        if (matches != 7) {
+            printf("Impossible to read the file !\n");
+            return;
+        }
+        axis.push_back(v[0]);
+        axis.push_back(v[1]);
+        axis.push_back(v[2]);
+        sharpness.push_back(v[3]);
+        amplitude.push_back(v[4]);
+        amplitude.push_back(v[5]);
+        amplitude.push_back(v[6]);
+    }
+    CUDA_ERROR_CHECK(cudaMemcpy(sgbuf->axis, axis.data(), (size_t)sgbuf->num * 3 * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_ERROR_CHECK(cudaMemcpy(sgbuf->sharpness, sharpness.data(), (size_t)sgbuf->num * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_ERROR_CHECK(cudaMemcpy(sgbuf->amplitude, amplitude.data(), (size_t)sgbuf->num * 3 * sizeof(float), cudaMemcpyHostToDevice));
+}
 
 __global__ void sgBakeKernel(const SGBuffer sgbuf, const Texture texture) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
