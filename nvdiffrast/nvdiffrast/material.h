@@ -91,6 +91,51 @@ public:
 
 
 
+struct SGSpecularKernelParams{
+	int width;
+	int height;
+	int depth;
+
+	float* rast;
+
+	float* normal;
+	float* view;
+
+	float* roughness;
+	float ior;
+
+	float* outAxis;
+	float* outSharpness;
+	float* outAmplitude;
+};
+
+struct SGSpecularGradKernelParams{
+	float* normal;
+	float* view;
+
+	float* roughness;
+	float ior;
+
+	float* out;
+};
+
+struct SGSpecularParams {
+	SGSpecularKernelParams kernel;
+	size_t Size(int dimention) { return (size_t)kernel.width * kernel.height * kernel.depth * dimention * sizeof(float); };
+};
+
+struct SGSpecularGradParams :SGSpecularParams {
+	SGSpecularGradKernelParams grad;
+};
+
+class SGSpecular {
+public:
+	static void init(SGSpecularParams& spec, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapParams& roughness, float ior);
+	static void forward(SGSpecularParams& spec);
+};
+
+
+
 struct SphericalGaussianKernelParams {
 	int width;
 	int height;
@@ -99,16 +144,18 @@ struct SphericalGaussianKernelParams {
 
 	float* rast;
 
-	float* normal;
-	float* view;
-	float* diffuse;
-	float* roughness;
-	float ior;
-
 	int sgnum;
 	float* axis;
 	float* sharpness;
 	float* amplitude;
+
+	float* normal;
+	float* view;
+	float* diffuse;
+
+	float* specAxis;
+	float* specSharpness;
+	float* specAmplitude;
 
 	float* out;
 	float* outDiffenv;
@@ -119,12 +166,14 @@ struct SphericalGaussianGradKernelParams {
 	float* normal;
 	float* view;
 	float* diffuse;
-	float* roughness;
-	float ior;
 
 	float* axis;
 	float* sharpness;
 	float* amplitude;
+
+	float* specAxis;
+	float* specSharpness;
+	float* specAmplitude;
 
 	float* out;
 };
@@ -140,7 +189,10 @@ struct SphericalGaussianGradParams : SphericalGaussianParams{
 
 class SphericalGaussian {
 public:
-	static void init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapParams& diffuse, TexturemapParams& roughness, SGBuffer& sgbuf, float ior);
+	static void init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapParams& diffuse, SGSpecularParams& spec, SGBuffer& sgbuf);
+	static void init(SphericalGaussianGradParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapParams& diffuse, SGSpecularParams& spec, SGBufferGrad& sgbuf);
+	static void init(SphericalGaussianGradParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapGradParams& diffuse, SGSpecularParams& spec, SGBufferGrad& sgbuf);
 	static void forward(SphericalGaussianParams& sg);
+	static void forward(SphericalGaussianGradParams& sg);
 	static void backward(SphericalGaussianGradParams& sg);
 };

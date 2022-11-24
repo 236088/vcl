@@ -24,43 +24,50 @@ class PresetPrimitives {
 	Attribute _texel;
 	Attribute _normal;
 	Attribute color;
-	Texture _diffusemap;
+	Texture target_diffusemap;
+	TextureGrad predict_diffusemap;
 	Texture _normalmap;
 	Texture _roughnessmap;
-	SGBuffer sgbuf;
-	Texture sgbake;
-	GLbuffer bake_buffer;
+	SGBuffer target_sgbuf;
+	Texture target_sgbake;
+	GLbuffer target_bake_buffer;
+	SGBufferGrad predict_sgbuf;
+	Texture predict_sgbake;
+	GLbuffer predict_bake_buffer;
 
 	ProjectParams proj;
 	RasterizeParams rast;
 	InterpolateParams intr;
 	InterpolateParams color_intr;
 	InterpolateParams normal_intr;
-	TexturemapParams diffusemap;
+	TexturemapParams target_diff;
+	TexturemapGradParams predict_diff;
 	TexturemapParams normalmap;
 	TexturemapParams roughnessmap;
 	NormalAxisParams normal_axis;
 	ViewAxisParams view_axis;
-	SphericalGaussianParams sg;
-	AntialiasParams aa;
-	FilterParams flt;
-	RasterizeParams wire;
+	SGSpecularParams spec;
+	SphericalGaussianParams target_sg;
+	AntialiasParams target_aa;
+	SphericalGaussianGradParams predict_sg;
+	AntialiasGradParams predict_aa;
 
-	RasterizeParams wireframe;
-	RasterizeParams idhash;
+	LossParams loss;
+	AdamParams adam_amplitude;
+	AdamParams adam_sharpness;
+	AdamParams adam_axis;
+	AdamParams adam_diffusemap;
 
-	GLbuffer rast_buffer;
-	GLbuffer intr_buffer;
-	GLbuffer color_buffer;
-	GLbuffer tex_buffer;
-	GLbuffer aa_buffer;
-	GLbuffer flt_buffer;
-	GLbuffer normal_buffer;
-	GLbuffer sgdiffenv_buffer;
-	GLbuffer sgspecenv_buffer;
-	GLbuffer sg_buffer;
-	GLbuffer wire_buffer;
+	GLbuffer target_map_buffer;
+	GLbuffer predict_map_buffer;
+	GLbuffer target_aa_buffer;
+	GLbuffer predict_aa_buffer;
 
+	Mat out;
+	float* buf;
+	VideoWriter writer;
+	Mat frame;
+	Mat frm;
 	GLbuffer sample_buffer;
 
 public:

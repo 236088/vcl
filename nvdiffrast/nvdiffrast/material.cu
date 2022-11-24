@@ -37,10 +37,10 @@ __global__ void NormalAxisForwardKernel(const NormalAxisKernelParams norm) {
     float3 n0 = ((float3*)norm.normal)[norm.normalidx[idx * 3]] - n2;
     float3 n1 = ((float3*)norm.normal)[norm.normalidx[idx * 3 + 1]] - n2;
     float3 N = normalize(n0 * r.x + n1 * r.y + n2);
-    if (norm.normalmap == nullptr) {
+    if (norm.normalmap != nullptr) {
         float3 normal = make_float3(
             norm.rot[0] * N.x + norm.rot[4] * N.y + norm.rot[8] * N.z,
-            -(norm.rot[1] * N.x + norm.rot[5] * N.y + norm.rot[9] * N.z),
+            norm.rot[1] * N.x + norm.rot[5] * N.y + norm.rot[9] * N.z,
             norm.rot[2] * N.x + norm.rot[6] * N.y + norm.rot[10] * N.z
         );
         ((float3*)norm.out)[pidx] = normal;
@@ -63,7 +63,7 @@ __global__ void NormalAxisForwardKernel(const NormalAxisKernelParams norm) {
     N = normalize(T * normal.x + B * normal.y + N * normal.z);
     ((float3*)norm.out)[pidx] = normalize(make_float3(
         norm.rot[0] * N.x + norm.rot[4] * N.y + norm.rot[8] * N.z,
-        -(norm.rot[1] * N.x + norm.rot[5] * N.y + norm.rot[9] * N.z),
+        norm.rot[1] * N.x + norm.rot[5] * N.y + norm.rot[9] * N.z,
         norm.rot[2] * N.x + norm.rot[6] * N.y + norm.rot[10] * N.z
     ));
 }
@@ -102,8 +102,8 @@ __global__ void ViewAxisForwardKernel(const ViewAxisKernelParams view) {
     );
 
     ((float3*)view.out)[pidx] = normalize(
-         ((float3*)view.pvinv)[0] * screenpos.x
-        - ((float3*)view.pvinv)[1] * screenpos.y
+        ((float3*)view.pvinv)[0] * screenpos.x
+        + ((float3*)view.pvinv)[1] * screenpos.y
         + ((float3*)view.pvinv)[2]);
 }
 
@@ -119,7 +119,73 @@ void ViewAxis::forward(ViewAxisParams& view) {
 
 
 
-void SphericalGaussian::init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapParams& diffuse, TexturemapParams& roughness, SGBuffer& sgbuf, float ior) {
+void SGSpecular::init(SGSpecularParams& spec, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapParams& roughness, float ior) {
+    spec.kernel.width = rast.kernel.width;
+    spec.kernel.height = rast.kernel.height;
+    spec.kernel.depth = rast.kernel.depth;
+    spec.kernel.rast = rast.kernel.out;
+    spec.kernel.normal = normal.kernel.out;
+    spec.kernel.view = view.kernel.out;
+    spec.kernel.roughness = roughness.kernel.out;
+    spec.kernel.ior = ior;
+
+    CUDA_ERROR_CHECK(cudaMalloc(&spec.kernel.outAxis, spec.Size(3)));
+    CUDA_ERROR_CHECK(cudaMalloc(&spec.kernel.outAmplitude, spec.Size(1)));
+    CUDA_ERROR_CHECK(cudaMalloc(&spec.kernel.outSharpness, spec.Size(1)));
+}
+
+__global__ void SGSpecularForwardKernel(const SGSpecularKernelParams spec) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int pz = blockIdx.z;
+    if (px >= spec.width || py >= spec.height || pz >= spec.depth)return;
+    int pidx = px + spec.width * (py + spec.height * pz);
+
+    float4 r = ((float4*)spec.rast)[pidx];
+    int idx = (int)r.w - 1;
+    if (idx < 0) return;
+    float3 n = ((float3*)spec.normal)[pidx];
+
+    float3 v = -((float3*)spec.view)[pidx];
+    float3 p = 2.f * dot(v, n) * n - v;
+
+    float m = 0.f;// spec.roughness[pidx];
+    float m2 = m * m;
+
+    float vn = max(dot(v, n), 0.f);
+    float vn2 = vn * vn;
+    float iGv = vn + sqrt(vn2 + m2 * (1.f - vn2));
+
+    float pn = max(dot(p, n), 0.f);
+    float pn2 = pn * pn;
+    float iGp = pn + sqrt(pn2 + m2 * (1.f - pn2));
+
+    float g = sqrt(spec.ior * spec.ior - 1.f + pn2);
+    float g_pls_pn = g + pn;
+    float g_mns_pn = g - pn;
+    float f0 = g_mns_pn / g_pls_pn;
+    float f1 = (pn * g_pls_pn - 1.f) / (pn * g_mns_pn + 1.f);
+    float F = f0 * f0 * (1.f + f1 * f1);//0.5*2
+
+    ((float3*)spec.outAxis)[pidx] = p;
+    spec.outAmplitude[pidx] = F * pn / max(iGp * iGv * m2, 1e-6);
+    spec.outSharpness[pidx] = .5f / max(m2 * vn, 1e-6);
+}
+
+void SGSpecular::forward(SGSpecularParams& spec) {
+    CUDA_ERROR_CHECK(cudaMemset(spec.kernel.outAxis, 0, spec.Size(3)));
+    CUDA_ERROR_CHECK(cudaMemset(spec.kernel.outSharpness, 0, spec.Size(1)));
+    CUDA_ERROR_CHECK(cudaMemset(spec.kernel.outAmplitude, 0, spec.Size(1)));
+
+    dim3 block = getBlock(spec.kernel.width, spec.kernel.height);
+    dim3 grid = getGrid(block, spec.kernel.width, spec.kernel.height, spec.kernel.depth);
+    void* args[] = { &spec.kernel };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(SGSpecularForwardKernel, grid, block, args, 0, NULL));
+}
+
+
+
+void SphericalGaussian::init(SphericalGaussianParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapParams& diffuse, SGSpecularParams& spec, SGBuffer& sgbuf) {
     sg.kernel.width = rast.kernel.width;
     sg.kernel.height = rast.kernel.height;
     sg.kernel.depth = rast.kernel.depth;
@@ -127,82 +193,51 @@ void SphericalGaussian::init(SphericalGaussianParams& sg, RasterizeParams& rast,
 
     sg.kernel.rast = rast.kernel.out;
 
-    sg.kernel.normal = normal.kernel.out;
-    sg.kernel.view = view.kernel.out;
-    sg.kernel.diffuse = diffuse.kernel.out;
-    sg.kernel.roughness = roughness.kernel.out;
-    sg.kernel.ior = ior;
-
     sg.kernel.sgnum = sgbuf.num;
     sg.kernel.axis = sgbuf.axis;
     sg.kernel.sharpness = sgbuf.sharpness;
     sg.kernel.amplitude = sgbuf.amplitude;
+
+    sg.kernel.normal = normal.kernel.out;
+    sg.kernel.view = view.kernel.out;
+    sg.kernel.diffuse = diffuse.kernel.out;
+
+    sg.kernel.specAxis = spec.kernel.outAxis;
+    sg.kernel.specSharpness = spec.kernel.outSharpness;
+    sg.kernel.specAmplitude = spec.kernel.outAmplitude;
 
     CUDA_ERROR_CHECK(cudaMalloc(&sg.kernel.out, sg.Size()));
     CUDA_ERROR_CHECK(cudaMalloc(&sg.kernel.outDiffenv, sg.Size()));
     CUDA_ERROR_CHECK(cudaMalloc(&sg.kernel.outSpecenv, sg.Size()));
 }
 
-
-__global__ void SGForwardKernel(const SphericalGaussianKernelParams sg) {
+__global__ void SphericalGaussianForwardKernel(const SphericalGaussianKernelParams sg) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
     int pz = blockIdx.z;
     if (px >= sg.width || py >= sg.height || pz >= sg.depth)return;
     int pidx = px + sg.width * (py + sg.height * pz);
 
-    float3 v = ((float3*)sg.view)[pidx];
-
     float4 r = ((float4*)sg.rast)[pidx];
     int idx = (int)r.w - 1;
-    if (idx < 0) {
-        for (int i = 0; i < sg.sgnum; i++) {
-            float3 sgaxis = ((float3*)sg.axis)[i];
-            float sgsharpness = sg.sharpness[i];
-            float sgvalue = exp(sgsharpness * (dot(v, sgaxis) - 1.f));
-            for (int k = 0; k < sg.channel; k++) {
-                AddNaNcheck(sg.out[pidx * sg.channel + k], sg.amplitude[i * sg.channel + k] * sgvalue);
-            }
-        }
-        return;
-    }
-    v = -v;
+    if (idx < 0) return;
     float3 n = ((float3*)sg.normal)[pidx];
-    float3 p = 2.f * dot(v, n) * n - v;
-
-    float diffamplitude = .32424871f; //=1/(pi*(1-exp(-4))
-    float diffsharpness = 2.f;
+    float diffsharpness = 2.133f;
+    float diffamplitude = 2.34f;//1.17*2;
     float3 diffn = n * diffsharpness;
-
-    float m = sg.roughness[pidx];
-    float m2 = m * m;
-
-    float vn = max(dot(v, n),1e-6);
-    float vn2 = vn * vn;
-    float Gv = 1.f / (vn + sqrt(vn2 + m2 * (1.f - vn2)));
-
-    float pn = max(dot(p, n),1e-6);
-    float pn2 = pn * pn;
-    float Gp = 1.f / (pn + sqrt(pn2 + m2 * (1.f - pn2)));
-
-    float g = sqrt(sg.ior * sg.ior - 1.f + pn * pn);
-    float g_pls_pn = g + pn;
-    float g_mns_pn = g - pn;
-    float f0 = g_mns_pn / g_pls_pn;
-    float f1 = (pn * g_pls_pn - 1.f) / (pn * g_mns_pn + 1.f);
-    float F = .5f * f0 * f0 * (1.f + f1 * f1);
-
-    float specamplitude = F*Gp* Gv;
-    float specsharpness = .5f / max(m2 * vn, 1e-6);
+    
+    float3 p = ((float3*)sg.specAxis)[pidx];
+    float specsharpness = sg.specSharpness[pidx];
+    float specamplitude = sg.specAmplitude[pidx];
     float3 specn = p * specsharpness;
 
     for (int i = 0; i < sg.sgnum; i++) {
         float sgsharpness = sg.sharpness[i];
         float3 sgn = ((float3*)sg.axis)[i] * sgsharpness;
         float diffl = length(diffn + sgn);
-        float diffg = (exp(diffl - diffsharpness - sgsharpness) - exp(-diffl - diffsharpness - sgsharpness)) / max(diffl, 1e-6) * diffamplitude * 6.2831853f;
+        float diffg = (exp(diffl - diffsharpness - sgsharpness) - exp(-diffl - diffsharpness - sgsharpness)) / max(diffl, 1e-6) * diffamplitude;
         float specl = length(specn + sgn);
-        float specg = (exp(specl - specsharpness - sgsharpness) - exp(-specl - specsharpness - sgsharpness)) / max(specl, 1e-6) * specamplitude * 6.2831853f;
+        float specg = (exp(specl - specsharpness - sgsharpness) - exp(-specl - specsharpness - sgsharpness)) / max(specl, 1e-6) * specamplitude;
         for (int k = 0; k < sg.channel; k++) {
             float sgamplitude = sg.amplitude[i * sg.channel + k];
             AddNaNcheck(sg.outDiffenv[pidx * sg.channel + k], diffg * sgamplitude);
@@ -224,69 +259,103 @@ void SphericalGaussian::forward(SphericalGaussianParams& sg) {
     dim3 block = getBlock(sg.kernel.width, sg.kernel.height);
     dim3 grid = getGrid(block, sg.kernel.width, sg.kernel.height, sg.kernel.depth);
     void* args[] = { &sg.kernel};
-    CUDA_ERROR_CHECK(cudaLaunchKernel(SGForwardKernel, grid, block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(SphericalGaussianForwardKernel, grid, block, args, 0, NULL));
 }
 
-__global__ void SGBackwardKernel(const SphericalGaussianKernelParams sg, const SphericalGaussianGradKernelParams grad) {
+void SphericalGaussian::forward(SphericalGaussianGradParams& sg) {
+    CUDA_ERROR_CHECK(cudaMemset(sg.grad.out, 0, sg.Size()));
+    forward((SphericalGaussianParams&)sg);
+}
+
+void SphericalGaussian::init(SphericalGaussianGradParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapParams& diffuse, SGSpecularParams& spec, SGBufferGrad& sgbuf) {
+    init((SphericalGaussianParams&)sg, rast, normal, view, diffuse, spec, sgbuf);
+    CUDA_ERROR_CHECK(cudaMalloc(&sg.grad.out, sg.Size()));
+    sg.grad.axis = sgbuf.axis;
+    sg.grad.sharpness = sgbuf.sharpness;
+    sg.grad.amplitude = sgbuf.amplitude;
+}
+
+void SphericalGaussian::init(SphericalGaussianGradParams& sg, RasterizeParams& rast, NormalAxisParams& normal, ViewAxisParams& view, TexturemapGradParams& diffuse, SGSpecularParams& spec, SGBufferGrad& sgbuf) {
+    init(sg, rast, normal, view, (TexturemapParams&)diffuse, spec, sgbuf);
+    sg.grad.diffuse = diffuse.grad.out;
+}
+
+__global__ void SphericalGaussianBackwardKernel(const SphericalGaussianKernelParams sg, const SphericalGaussianGradKernelParams grad) {
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
     int pz = blockIdx.z;
     if (px >= sg.width || py >= sg.height || pz >= sg.depth)return;
     int pidx = px + sg.width * (py + sg.height * pz);
 
-    float3 v = ((float3*)sg.view)[pidx];
-
     float4 r = ((float4*)sg.rast)[pidx];
     int idx = (int)r.w - 1;
-    if (idx < 0)  return;
+    if (idx < 0) return;
 
+    float3 v = ((float3*)sg.view)[pidx];
+
+    float diffsum = 0.f;
     for (int k = 0; k < sg.channel; k++) {
         int idx = pidx * sg.channel + k;
-        grad.diffuse[idx] = grad.out[idx] * sg.outDiffenv[idx];
+        diffsum += sg.diffuse[idx];
     }
 
     float3 n = ((float3*)sg.normal)[pidx];
-    float3 p = v - 2.f * dot(v, n) * n;
-
-    float diffamplitude = .32424871f; //=1/(pi*(1-exp(-4))
-    float diffsharpness = 2.f;
+    float diffsharpness = 2.133f;
+    float diffamplitude = 2.34f;
     float3 diffn = n * diffsharpness;
 
-    float m = sg.roughness[pidx];
-    float m2 = m * m;
-
-    float vn = abs(dot(v, n));
-    float vn2 = vn * vn;
-    float Gv = 1.f / (vn + sqrt(vn2 + m2 * (1.f - vn2)));
-
-    float pn = abs(dot(p, n));
-    float pn2 = pn * pn;
-    float Gp = 1.f / (pn + sqrt(pn2 + m2 * (1.f - pn2)));
-
-    float g = sqrt(sg.ior * sg.ior - 1.f + pn * pn);
-    float g_pls_pn = g + pn;
-    float g_mns_pn = g - pn;
-    float f0 = g_mns_pn / g_pls_pn;
-    float f1 = (pn * g_pls_pn - 1.f) / (pn * g_mns_pn + 1.f);
-    float F = .5f * f0 * f0 * (1.f + f1 * f1);
-
-    float specamplitude = F * Gp * Gv;
-    float specsharpness = .5f / max(m2 * vn, 1e-6);
+    float3 p = ((float3*)sg.specAxis)[pidx];
+    float specsharpness = sg.specSharpness[pidx];
+    float specamplitude = sg.specAmplitude[pidx];
     float3 specn = p * specsharpness;
 
     for (int i = 0; i < sg.sgnum; i++) {
         float sgsharpness = sg.sharpness[i];
         float3 sgn = ((float3*)sg.axis)[i] * sgsharpness;
-        float diffl = length(diffn + sgn);
-        float diffg = exp(-sgsharpness - diffsharpness) * (exp(diffl) - exp(-diffl)) / max(diffl, 1e-6) * diffamplitude * 6.2831853f;
-        float3 specsgn = specn + sgn;
-        float specl = length(specsgn);
-        float specg = exp(-sgsharpness - specsharpness) * (exp(specl) - exp(-specl)) / max(specl, 1e-6) * specamplitude * 6.2831853f;
-        float dgdspecl = exp(-sgsharpness - specsharpness) * ((specl - 1.f) * exp(specl) - (specl + 1.f) * exp(-specl)) / max(dot(specsgn, specsgn), 1e-6) * specamplitude * 6.2831853f;
-        float sgamplitudesum = 0.f;
-        for (int k = 0; k < sg.channel; k++) {
-            sgamplitudesum += sg.amplitude[i * sg.channel + k];
-        }
 
+        float diffl = length(diffn + sgn);
+        float il = 1.f / max(diffl, 1e-6);
+        float dotn = (sgsharpness + diffsharpness * dot(sgn, n)) * il;
+        float expmns = exp(diffl - diffsharpness - sgsharpness);
+        float exppls = exp(-diffl - diffsharpness - sgsharpness);
+        float diffg = (expmns - exppls) * il * diffamplitude;
+        float3 ddiffgdsgn = ((1.f - il) * expmns + (1.f + il) * exppls) * il * (diffn + sgn) * il ;
+        float ddiffgdsgsharp = ((dotn * (1.f - il) - 1.f) * expmns + (dotn * (1.f + il) + 1.f) * exppls) * il ;
+
+        float specl = length(specn + sgn);
+        il = 1.f / max(specl, 1e-6);
+        dotn = (sgsharpness + specsharpness * dot(sgn, p)) * il;
+        float dotp = (sgsharpness * dot(sgn, p) + specsharpness) * il;
+        expmns = exp(specl - specsharpness - sgsharpness);
+        exppls = exp(-specl - specsharpness - sgsharpness);
+        float specg = (expmns - exppls) * il * specamplitude;
+        float3 dspecgdsgn = ((1.f - il) * expmns + (1.f + il) * exppls) * il * (specn + sgn) * il ;
+        float dspecgdsgsharp = ((dotn * (1.f - il) - 1.f) * expmns + (dotn * (1.f + il) + 1.f) * exppls) * il;
+        float dspecgdspecsharp = ((dotp * (1.f - il) - 1.f) * expmns + (dotp * (1.f + il) + 1.f) * exppls) * il;
+
+        float dLdoutsum = 0.f;
+        float dLdoutsumdiff = 0.f;
+        for (int k = 0; k < sg.channel; k++) {
+            float dLdout = grad.out[pidx * sg.channel + k];
+            float sgamplitude = sg.amplitude[i * sg.channel + k];
+            dLdoutsum += dLdout * sgamplitude;
+            dLdoutsumdiff += dLdout * sgamplitude * sg.diffuse[pidx * sg.channel + k];
+
+            AddNaNcheck(grad.amplitude[i * sg.channel + k], dLdout * (diffg * sg.diffuse[pidx * sg.channel + k] + specg));
+            if (grad.diffuse!=nullptr) AddNaNcheck(grad.diffuse[pidx * sg.channel + k], dLdout * diffg * sgamplitude);
+            if (grad.specAmplitude != nullptr) AddNaNcheck(grad.specAmplitude[pidx * sg.channel + k], dLdout * specg * sgamplitude);
+        }
+        AddNaNcheck(((float3*)grad.axis)[i], (dLdoutsumdiff * ddiffgdsgn * diffamplitude + dLdoutsum * dspecgdsgn * specamplitude) * sgsharpness);
+        if (grad.specAxis != nullptr) AddNaNcheck(((float3*)grad.specAxis)[pidx], dLdoutsum * dspecgdsgn * specamplitude * specsharpness);
+        AddNaNcheck(grad.sharpness[i], dLdoutsumdiff * ddiffgdsgsharp * diffamplitude + dLdoutsum * dspecgdsgsharp * specamplitude);
+        if (grad.specSharpness != nullptr) AddNaNcheck(grad.specSharpness[i], dLdoutsum * dspecgdspecsharp * specamplitude);
     }
+}
+
+
+void SphericalGaussian::backward(SphericalGaussianGradParams& sg) {
+    dim3 block = getBlock(sg.kernel.width, sg.kernel.height);
+    dim3 grid = getGrid(block, sg.kernel.width, sg.kernel.height, sg.kernel.depth);
+    void* args[] = { &sg.kernel, &sg.grad };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(SphericalGaussianBackwardKernel, grid, block, args, 0, NULL));
 }

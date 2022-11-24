@@ -144,8 +144,7 @@ void Rotation::reset(RotationGradParams& rot){
 }
 
 
-void Camera::init(CameraParams& cam, RotationParams& rot, glm::vec3 eye, glm::vec3 direction, glm::vec3 up, float size, float aspect, float znear, float zfar) {
-	setCam(cam, eye, direction, up);
+void Camera::init(CameraParams& cam, RotationParams& rot, glm::vec3 eye, glm::vec3 center, glm::vec3 up, float size, float aspect, float znear, float zfar) {
 	cam.kernel.size = size;
 	cam.kernel.aspect = aspect;
 	cam.kernel.znear = znear;
@@ -155,6 +154,7 @@ void Camera::init(CameraParams& cam, RotationParams& rot, glm::vec3 eye, glm::ve
 	CUDA_ERROR_CHECK(cudaMallocHost(&cam.kernel.projection, 16 * sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMallocHost(&cam.kernel.mat, 16 * sizeof(float)));
 	CUDA_ERROR_CHECK(cudaMalloc(&cam.kernel.out, 16 * sizeof(float)));
+	setCam(cam, eye, center, up);
 }
 
 void Camera::init(CameraGradParams& cam, RotationParams& rot, glm::vec3 eye, glm::vec3 direction, glm::vec3 up, float size, float aspect, float znear, float zfar) {
@@ -172,28 +172,23 @@ void Camera::init(CameraGradParams& cam, RotationGradParams& rot, glm::vec3 eye,
 	cam.grad.rotation = rot.grad.rotation;
 }
 
-glm::quat getLookAt(glm::vec3 direction, glm::vec3 up) {
-	glm::vec3 f = glm::normalize(-direction);
-	glm::vec3 s = glm::normalize(glm::cross(up, f));
-	glm::vec3 u = glm::normalize(glm::cross(f, s));
-
-	return glm::quat(
-		.5f * sqrt(s.x - u.y - f.z + 1.f),
-		.5f * sqrt(-s.x + u.y - f.z + 1.f),
-		.5f * sqrt(-s.x - u.y + f.z + 1.f),
-		.5f * sqrt(s.x + u.y + f.z + 1.f)
-	);
-}
-
 glm::mat4 getView(glm::quat q, glm::vec3 eye) {
 	glm::mat4 view = getRotation(q);
 	view[3] = view * glm::vec4(-eye, 1.f);
+
 	return view;
 }
 
-void Camera::setCam(CameraParams& cam, glm::vec3 eye, glm::vec3 direction, glm::vec3 up) {
+void Camera::setCam(CameraParams& cam, glm::vec3 eye, glm::vec3 center, glm::vec3 up) {
 	cam.kernel.eye = eye;
-	cam.kernel.q = getLookAt(direction, up);
+	glm::vec3 f = glm::normalize(eye - center);
+	glm::vec3 s = glm::normalize(glm::cross(up, f));
+	glm::vec3 u = glm::normalize(glm::cross(f, s));
+
+	cam.kernel.q.w = .5f * sqrt(s.x + u.y + f.z + 1.f);
+	cam.kernel.q.x = (f.y > u.z ? .5f : -.5f) * sqrt(abs(s.x - u.y - f.z + 1.f));
+	cam.kernel.q.y = (s.z > f.x ? .5f : -.5f) * sqrt(abs(-s.x + u.y - f.z + 1.f));
+	cam.kernel.q.z = (u.x > s.y ? .5f : -.5f) * sqrt(abs(-s.x - u.y + f.z + 1.f));
 }
 
 //
@@ -213,17 +208,13 @@ void Camera::setCam(CameraParams& cam, glm::vec3 eye, glm::vec3 direction, glm::
 //
 void Camera::forward(CameraParams& cam) {
 	*cam.kernel.view = getView(cam.kernel.q, cam.kernel.eye);
-
-	glm::vec3 e = cam.kernel.eye;
 	float sy = cam.kernel.znear / cam.kernel.size;
 	float sx = sy / cam.kernel.aspect;
-	float ex = -e.x / e.z * sx;
-	float ey = -e.y / e.z * sy;
 	float f_n = cam.kernel.zfar - cam.kernel.znear;
 	*cam.kernel.projection = glm::mat4(
 		sx, 0.f, 0.f, 0.f,
 		0.f, sy, 0.f, 0.f,
-		ex, ey, -(cam.kernel.zfar + cam.kernel.znear) / f_n, -1.f,
+		0.f, 0.f, -(cam.kernel.zfar + cam.kernel.znear) / f_n, -1.f,
 		0.f, 0.f, -2.f * cam.kernel.zfar * cam.kernel.znear / f_n, 0.f
 	);
 	*cam.kernel.mat = *cam.kernel.projection * *cam.kernel.view * *cam.kernel.rotation;

@@ -676,20 +676,37 @@ void SGBuffer::randomize(SGBuffer& sgbuf) {
     CUDA_ERROR_CHECK(cudaLaunchKernel(sphericalRandomKernel, grid, block, sargs, 0, NULL));
 
     int height = 1;
-    float min = 0.f, max = 1.f;
+    float min = 1.f, max = 10.f;
     seed = rand();
     void* rargs[] = { &sgbuf.sharpness, &min, &max, &sgbuf.num, &height, &dimention, &seed };
     CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, rargs, 0, NULL));
-
-    float exp = .45f, c = 50.f;
-    void* eargs[] = { &sgbuf.sharpness,  &sgbuf.sharpness, &c, &exp, &sgbuf.num, &height, &dimention };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(powbaseKernel, grid, block, eargs, 0, NULL));
 
     min = 0.f, max = 1.f;
     height = sgbuf.channel;
     seed = rand();
     rargs[0] = &sgbuf.amplitude;
     CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, rargs, 0, NULL));
+}
+
+void SGBuffer::normalize(SGBuffer& sgbuf) {
+    int height = 1;
+    dim3 block = getBlock(sgbuf.num, 1);
+    dim3 grid = getGrid(block, sgbuf.num, 1);
+    void* nargs[] = { &sgbuf.axis, &sgbuf.axis, &sgbuf.num, &height, &sgbuf.channel };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(normalizeKernel, grid, block, nargs, 0, NULL));
+
+    float min = 0.f;
+    float max = 8.f;
+    int channel = 1;
+    void* aargs[] = { &sgbuf.sharpness, &sgbuf.sharpness, &min ,&max, &sgbuf.num, &height, &channel };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(clampKernel, grid, block, aargs, 0, NULL));
+
+    max = 1.f;
+    block = getBlock(sgbuf.num, sgbuf.channel);
+    grid = getGrid(block, sgbuf.num, sgbuf.channel);
+    void* sargs[] = { &sgbuf.amplitude, &sgbuf.amplitude, &min ,&max, &sgbuf.num, &sgbuf.channel, &channel };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(clampKernel, grid, block, sargs, 0, NULL));
+
 }
 
 void SGBuffer::loadTXT(const char* path, SGBuffer* sgbuf) {
@@ -727,7 +744,7 @@ __global__ void sgBakeKernel(const SGBuffer sgbuf, const Texture texture) {
     if (px >= texture.width || py >= texture.height)return;
     int pidx = px + texture.width * (py + texture.height * pz);
 
-    float phi = (2.f * (float)px / (float)texture.width - 1.f) * 3.14159265f;
+    float phi = (1.f - 2.f * (float)px / (float)texture.width) * 3.14159265f;
     float theta = (2.f * (float)py / (float)texture.height - 1.f) * 1.5707963f;
     float3 axis = make_float3(sin(phi) * cos(theta), sin(theta), cos(phi) * cos(theta));
 
@@ -742,10 +759,24 @@ __global__ void sgBakeKernel(const SGBuffer sgbuf, const Texture texture) {
 }
 
 void SGBuffer::bake(SGBuffer& sgbuf, Texture& texture) {
+    Texture::liner(texture, 0.f, 0.f);
     dim3 block = getBlock(texture.width, texture.height);
     dim3 grid = getGrid(block, texture.width, texture.height);
     void* args[] = { &sgbuf, &texture };
     CUDA_ERROR_CHECK(cudaLaunchKernel(sgBakeKernel, grid, block, args, 0, NULL));
+}
+
+void SGBufferGrad::init(SGBufferGrad& sgbuf, int num, int channel) {
+    SGBuffer::init(sgbuf, num, channel);
+    CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.axis, (size_t)num * 3 * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.sharpness, (size_t)num * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.amplitude, (size_t)num * channel * sizeof(float)));
+}
+
+void SGBufferGrad::clear(SGBufferGrad& sgbuf) {
+    CUDA_ERROR_CHECK(cudaMemset(sgbuf.axis, 0, (size_t)sgbuf.num * 3 * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemset(sgbuf.sharpness, 0, (size_t)sgbuf.num * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemset(sgbuf.amplitude, 0, (size_t)sgbuf.num * sgbuf.channel * sizeof(float)));
 }
 
 

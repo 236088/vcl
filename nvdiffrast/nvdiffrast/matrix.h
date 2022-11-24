@@ -87,10 +87,10 @@ struct CameraGradParams : CameraParams {
 
 class Camera {
 public:
-	static void init(CameraParams& cam, RotationParams& rot, glm::vec3 eye, glm::vec3 direction, glm::vec3 up, float size, float aspect, float znear, float zfar);
-	static void init(CameraGradParams& cam, RotationParams& rot, glm::vec3 eye, glm::vec3 direction, glm::vec3 up, float size, float aspect, float znear, float zfar);
-	static void init(CameraGradParams& cam, RotationGradParams& rot, glm::vec3 eye, glm::vec3 direction, glm::vec3 up, float size, float aspect, float znear, float zfar);
-	static void setCam(CameraParams& cam, glm::vec3 eye, glm::vec3 direction, glm::vec3 up);
+	static void init(CameraParams& cam, RotationParams& rot, glm::vec3 eye, glm::vec3 center, glm::vec3 up, float size, float aspect, float znear, float zfar);
+	static void init(CameraGradParams& cam, RotationParams& rot, glm::vec3 eye, glm::vec3 center, glm::vec3 up, float size, float aspect, float znear, float zfar);
+	static void init(CameraGradParams& cam, RotationGradParams& rot, glm::vec3 eye, glm::vec3 center, glm::vec3 up, float size, float aspect, float znear, float zfar);
+	static void setCam(CameraParams& cam, glm::vec3 eye, glm::vec3 center, glm::vec3 up);
 	static void forward(CameraParams& cam);
 	static void forward(CameraGradParams& cam);
 	static void backward(CameraGradParams& cam);

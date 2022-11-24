@@ -88,6 +88,7 @@ struct SGBuffer {
 	static void init(SGBuffer& sgbuf, int num, int channel);
 	static void copy(SGBuffer& dst, float* axis, float* sharpness, float* amplitude);
 	static void randomize(SGBuffer& sgbuf);
+	static void normalize(SGBuffer& sgbuf);
 	static void loadTXT(const char* path, SGBuffer* sgbuf);
 	static void bake(SGBuffer& sgbuf, Texture& texture);
 };
@@ -96,6 +97,8 @@ struct SGBufferGrad :SGBuffer {
 	float* axis;
 	float* sharpness;
 	float* amplitude;
+	static void init(SGBufferGrad& sgbuf, int num, int channel);
+	static void clear(SGBufferGrad& sgbuf);
 };
 
 

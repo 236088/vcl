@@ -1,4 +1,4 @@
-# Blender MTL File: 'None'
+# Blender MTL File: 'Infinite.blend'
 # Material Count: 1
 
 newmtl defaultMat
@@ -10,6 +10,6 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.450000
 d 1.000000
 illum 2
-map_Bump C:\\Users\\s2360\\Downloads\\Infinite_Scan_Ver0.1\\Images\\Infinite-Level_02_Tangent_SmoothUV.jpg
-map_Kd C:\\Users\\s2360\\Downloads\\Infinite_Scan_Ver0.1\\Images\\Map-COL.jpg
-map_Ns C:\\Users\\s2360\\Downloads\\textures\\bump.png
+map_Bump C:\\Users\\s2360\\Documents\\vcl\\textures\\Infinite_NormalGL.bmp
+map_Kd C:\\Users\\s2360\\Documents\\vcl\\textures\\Infinite_Color.bmp
+map_Ns C:\\Users\\s2360\\Documents\\vcl\\textures\\Infinite_Roughness.bmp

@@ -5,7 +5,8 @@ unsigned int step = 0;
 float loss_sum = 0;
 bool play = false;
 
-#define PRESET_NUM 1
+#define PAUSE 1000
+#define PRESET_NUM 0
 
 #if PRESET_NUM==0
 PresetPrimitives preset;
@@ -31,6 +32,10 @@ static void IdleFunc(void)
 {	
 	if (!play)return;
 	step++;
+	if (step % PAUSE == 0) {
+		play = false;
+		return;
+	}
 	pre = cur;
 	timespec_get(&cur, TIME_UTC);
 	double dt = double(cur.tv_sec - pre.tv_sec) + double(cur.tv_nsec - pre.tv_nsec) * 1e-9;
@@ -50,6 +55,9 @@ static void KeyboardFunc(unsigned char key, int x, int y) {
 	{
 	case ' ':
 		play = !play;
+		break;
+	case 0x1b:
+		exit(0);
 		break;
 	default:
 		break;

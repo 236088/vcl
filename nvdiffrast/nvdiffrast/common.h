@@ -21,7 +21,9 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <opencv2/opencv.hpp>
 using namespace std;
+using namespace cv;
 
 #define MAX_DIM_PER_BLOCK 16
 
@@ -177,6 +179,7 @@ static __device__ __forceinline__ void atomicAdd_xyw(float* ptr, float x, float 
 	atomicAdd(ptr + 3, w);
 }
 static __device__ __forceinline__ void AddNaNcheck(float& a, float b) { if (!isfinite(a))a = 0.f; else { float v = a + b; if (isfinite(v))a = v; } };
+static __device__ __forceinline__ void AddNaNcheck(float3& a, float3 b) { if (!(isfinite(a.x) && isfinite(a.y) && isfinite(a.z)))a = make_float3(0.f, 0.f, 0.f); else { float3 v = a + b; if (isfinite(v.x) && isfinite(v.y) && isfinite(v.z))a = v; } };
 
 static __device__ __forceinline__ double dot(double2 a, double2 b) { return a.x * b.x + a.y * b.y; }
 static __device__ __forceinline__ double dot(double3 a, double3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
