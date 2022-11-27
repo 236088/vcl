@@ -676,15 +676,9 @@ void SGBuffer::randomize(SGBuffer& sgbuf) {
     CUDA_ERROR_CHECK(cudaLaunchKernel(sphericalRandomKernel, grid, block, sargs, 0, NULL));
 
     int height = 1;
-    float min = 1.f, max = 10.f;
+    float min = 1.f, max = 100.f;
     seed = rand();
     void* rargs[] = { &sgbuf.sharpness, &min, &max, &sgbuf.num, &height, &dimention, &seed };
-    CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, rargs, 0, NULL));
-
-    min = 0.f, max = 1.f;
-    height = sgbuf.channel;
-    seed = rand();
-    rargs[0] = &sgbuf.amplitude;
     CUDA_ERROR_CHECK(cudaLaunchKernel(randomKernel, grid, block, rargs, 0, NULL));
 }
 
@@ -771,12 +765,49 @@ void SGBufferGrad::init(SGBufferGrad& sgbuf, int num, int channel) {
     CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.axis, (size_t)num * 3 * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.sharpness, (size_t)num * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.amplitude, (size_t)num * channel * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMalloc(&sgbuf.buffer, (size_t)num * 3 * sizeof(float)));
+}
+
+__global__ void sgDisperseKernel(const SGBuffer sgbuf, float* buffer) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    if (px >= sgbuf.num)return;
+    float3 axis = ((float3*)sgbuf.axis)[px];
+    float sharpness = sgbuf.sharpness[px];
+    float3 force = make_float3(0.f, 0.f, 0.f);
+    for (int i = 0; i < sgbuf.num; i++) {
+        float sqDiffAmplitude = 0.f;
+        for (int k = 0; k < sgbuf.channel; k++) {
+            float diff = sgbuf.sharpness[px * sgbuf.channel + k] - sgbuf.sharpness[i * sgbuf.channel + k];
+            sqDiffAmplitude += diff * diff;
+        }
+        float3 vec = axis - ((float3*)sgbuf.axis)[i];
+        float l2 = max(dot(vec, vec), 1e-6);
+        vec *= 1.f / sqrt(l2);
+        force += vec * (1.f / max(l2 * sharpness * sqDiffAmplitude, 1e-6));
+    }
+    ((float3*)buffer)[px] = force;
+}
+
+__global__ void sgAddKernel(const SGBuffer sgbuf, float* buffer) {
+    int px = blockIdx.x * blockDim.x + threadIdx.x;
+    if (px >= sgbuf.num)return;
+
+    ((float3*)sgbuf.axis)[px] += ((float3*)buffer)[px];
+}
+
+void SGBufferGrad::disperse(SGBufferGrad& sgbuf) {
+    dim3 block = getBlock(sgbuf.num, 1);
+    dim3 grid = getGrid(block, sgbuf.num, 1);
+    void* args[] = { &(SGBuffer)sgbuf, &sgbuf.buffer };
+    CUDA_ERROR_CHECK(cudaLaunchKernel(sgDisperseKernel, grid, block, args, 0, NULL));
+    CUDA_ERROR_CHECK(cudaLaunchKernel(sgAddKernel, grid, block, args, 0, NULL));
 }
 
 void SGBufferGrad::clear(SGBufferGrad& sgbuf) {
     CUDA_ERROR_CHECK(cudaMemset(sgbuf.axis, 0, (size_t)sgbuf.num * 3 * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMemset(sgbuf.sharpness, 0, (size_t)sgbuf.num * sizeof(float)));
     CUDA_ERROR_CHECK(cudaMemset(sgbuf.amplitude, 0, (size_t)sgbuf.num * sgbuf.channel * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemset(sgbuf.buffer, 0, (size_t)sgbuf.num * 3 * sizeof(float)));
 }
 
 

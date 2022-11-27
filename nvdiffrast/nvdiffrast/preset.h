@@ -26,8 +26,9 @@ class PresetPrimitives {
 	Attribute color;
 	Texture target_diffusemap;
 	TextureGrad predict_diffusemap;
+	Texture target_roughnessmap;
+	TextureGrad predict_roughnessmap;
 	Texture _normalmap;
-	Texture _roughnessmap;
 	SGBuffer target_sgbuf;
 	Texture target_sgbake;
 	GLbuffer target_bake_buffer;
@@ -40,15 +41,17 @@ class PresetPrimitives {
 	InterpolateParams intr;
 	InterpolateParams color_intr;
 	InterpolateParams normal_intr;
-	TexturemapParams target_diff;
-	TexturemapGradParams predict_diff;
 	TexturemapParams normalmap;
-	TexturemapParams roughnessmap;
 	NormalAxisParams normal_axis;
 	ViewAxisParams view_axis;
-	SGSpecularParams spec;
+	TexturemapParams target_diff;
+	TexturemapParams target_rough;
+	SGSpecularParams target_spec;
 	SphericalGaussianParams target_sg;
 	AntialiasParams target_aa;
+	TexturemapGradParams predict_diff;
+	TexturemapGradParams predict_rough;
+	SGSpecularGradParams predict_spec;
 	SphericalGaussianGradParams predict_sg;
 	AntialiasGradParams predict_aa;
 
@@ -57,17 +60,20 @@ class PresetPrimitives {
 	AdamParams adam_sharpness;
 	AdamParams adam_axis;
 	AdamParams adam_diffusemap;
+	AdamParams adam_roughnessmap;
 
-	GLbuffer target_map_buffer;
-	GLbuffer predict_map_buffer;
+	GLbuffer target_diffusemap_buffer;
+	GLbuffer target_roughnessmap_buffer;
+	GLbuffer predict_diffusemap_buffer;
+	GLbuffer predict_roughnessmap_buffer;
 	GLbuffer target_aa_buffer;
 	GLbuffer predict_aa_buffer;
 
-	Mat out;
-	float* buf;
-	VideoWriter writer;
-	Mat frame;
-	Mat frm;
+	//Mat out;
+	//float* buf;
+	//VideoWriter writer;
+	//Mat frame;
+	//Mat frm;
 	GLbuffer sample_buffer;
 
 public:

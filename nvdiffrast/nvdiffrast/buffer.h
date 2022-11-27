@@ -97,7 +97,9 @@ struct SGBufferGrad :SGBuffer {
 	float* axis;
 	float* sharpness;
 	float* amplitude;
+	float* buffer;
 	static void init(SGBufferGrad& sgbuf, int num, int channel);
+	static void disperse(SGBufferGrad& sgbuf);
 	static void clear(SGBufferGrad& sgbuf);
 };
 
